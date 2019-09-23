@@ -1,0 +1,104 @@
+#include "taskqueue.h"
+#include <time.h>
+#include <string>
+
+char *fn;
+int thread_num;
+bool done = false;
+pthread_mutex_t mtx;
+pthread_cond_t cond;
+pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;
+pthread_barrier_t barrier;
+
+void *thread_work(void * args){
+    uint64_t task;
+    TaskQueue *tasks = (TaskQueue *)args;
+    pthread_barrier_wait(&barrier);
+    while(!done){
+        task &= 0;
+        if(!pthread_mutex_lock(&mtx)) printf("%d start\n", pthread_self());
+        if(pthread_cond_wait(&cond, &mtx)) printf("worker wake up failed\n");
+        printf("%d process\n", pthread_self());
+        if(!(tasks->empty())){
+            task = tasks->pop();
+            printf("%d : %u %u\n", pthread_self(), task >> 62, (uint32_t) task);
+            
+        }
+        pthread_mutex_unlock(&mtx);
+        if(done) break;
+    }
+    printf("%d finished\n", pthread_self());
+    pthread_exit(NULL);
+}
+
+void *thread_main(void *args){
+    TaskQueue *tasks = (TaskQueue *)args;
+    pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+    char action;
+    uint64_t num;
+    uint64_t task;
+    uint32_t status;
+
+    FILE* fin = fopen(fn, "r");
+    pthread_t *workers = (pthread_t *)malloc(sizeof(pthread_t) * thread_num);
+    pthread_barrier_init(&barrier, NULL, thread_num);
+    pthread_mutex_init(&mtx, NULL);
+    pthread_cond_init(&cond, NULL);
+    for(int i = 0; i< thread_num; ++i){
+        pthread_create(&workers[i], NULL, thread_work, tasks);
+    }
+
+    while (fscanf(fin, "%c %llu\n", &action, &num) == 2) {
+        task &= 0;
+        printf("read : %c %ld\n", action, num);
+        if (action == 'i') {            // insert
+            task = static_cast<uint64_t>(Flag::insert) | num;
+        }else if (action == 'q') {      // qeury
+            task = static_cast<uint64_t>(Flag::query) | num;
+        }else if (action == 'w') {     // wait
+            task = static_cast<uint64_t>(Flag::wait) | num; 
+        }else {
+            printf("ERROR: Unrecognized action: '%c'\n", action);
+        }
+        //pthread_mutex_lock(&mtx);
+        tasks->push(task);
+        //pthread_mutex_unlock(&mtx);
+        cout << "main : one wake up" << endl;
+        if(pthread_cond_signal(&cond)) printf("wake up error\n");
+    }
+    tasks->print();
+    while(!(tasks->empty())) pthread_cond_signal(&cond);
+
+    done = true;
+    pthread_cond_broadcast(&cond);
+
+    for(int i = 0; i< thread_num; ++i){
+        pthread_join(workers[i], (void **)&status);
+    }
+    fclose(fin);
+    pthread_mutex_destroy(&mtx);
+    pthread_cond_destroy(&cond);
+    pthread_barrier_destroy(&barrier);
+}
+
+
+
+int main(int argc, char** argv){
+    thread_num = atoi(argv[2]);
+    fn = argv[1];
+
+    struct timespec start, stop;
+    pthread_t tmain;
+    int status;
+    TaskQueue tasks(10, 1);
+
+    clock_gettime( CLOCK_REALTIME, &start);
+
+    pthread_create(&tmain, NULL, thread_main, &tasks);
+    pthread_join(tmain, (void **)&status);
+    
+    clock_gettime( CLOCK_REALTIME, &stop);
+
+    cout << "Elapsed time: " << (stop.tv_sec - start.tv_sec) + ((double) (stop.tv_nsec - start.tv_nsec))/1000000000 << " sec" << endl;
+    
+}
