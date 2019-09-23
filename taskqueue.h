@@ -30,7 +30,7 @@ public:
     }
 
     void push(uint64_t _value){
-        //pthread_mutex_lock(&mtx);
+        pthread_mutex_lock(&mtx);
         if((tail + 1)  %  size == head){
             size *= 2;
             uint64_t *tmp = new uint64_t[size];
@@ -41,12 +41,12 @@ public:
         tail = (tail + 1) % size;
         arr[tail] = _value;
         if(v) printf("%lu %d inserted\n", _value >> 62, (int)_value);
-        //pthread_mutex_unlock(&mtx);
+        pthread_mutex_unlock(&mtx);
     }
 
     uint64_t pop(){
         uint64_t hval = ERROR;
-        //pthread_mutex_lock(&mtx);
+        pthread_mutex_lock(&mtx);
         if(head != tail){
             head = (head + 1) % size;
             hval = arr[head];
@@ -56,7 +56,7 @@ public:
             else printf("%lu %d popped\n", hval >> 62, (int)hval);
         }
         
-        //pthread_mutex_unlock(&mtx);
+        pthread_mutex_unlock(&mtx);
         return hval;
     }
 
@@ -75,9 +75,9 @@ public:
     void print(){
         printf("head : %d tail : %d size : %d\n", head, tail, size);
         for(int i = 0; i < size; ++i){
-            cout << "(" << (arr[i] >> 62) << " " << (uint32_t)arr[i] << ") ";
+            printf("(%u %u) ", (arr[i] >> 62), (uint32_t)arr[i]);
         }
-        cout << endl;
+        printf("\n");
     }
 
     ~TaskQueue(){

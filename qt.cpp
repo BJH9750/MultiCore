@@ -13,42 +13,42 @@ pthread_barrier_t barrier;
 void *thread_work(void * args){
     uint64_t task;
     TaskQueue *tasks = (TaskQueue *)args;
+    printf("%llu created\n", pthread_self());
     pthread_barrier_wait(&barrier);
     while(!done){
         task &= 0;
-        if(!pthread_mutex_lock(&mtx)) printf("%d start\n", pthread_self());
+        pthread_mutex_lock(&mtx);
         if(pthread_cond_wait(&cond, &mtx)) printf("worker wake up failed\n");
-        printf("%d process\n", pthread_self());
         if(!(tasks->empty())){
             task = tasks->pop();
-            printf("%d : %u %u\n", pthread_self(), task >> 62, (uint32_t) task);
-            
+            printf("%llu : %u %u\n", pthread_self(), task >> 62, (uint32_t) task);
         }
         pthread_mutex_unlock(&mtx);
-        if(done) break;
+        //if(done) break;
     }
-    printf("%d finished\n", pthread_self());
+    printf("%llu finished\n", pthread_self());
     pthread_exit(NULL);
 }
 
 void *thread_main(void *args){
     TaskQueue *tasks = (TaskQueue *)args;
-    pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+    
     char action;
     uint64_t num;
     uint64_t task;
-    uint32_t status;
 
     FILE* fin = fopen(fn, "r");
     pthread_t *workers = (pthread_t *)malloc(sizeof(pthread_t) * thread_num);
-    pthread_barrier_init(&barrier, NULL, thread_num);
-    pthread_mutex_init(&mtx, NULL);
-    pthread_cond_init(&cond, NULL);
-    for(int i = 0; i< thread_num; ++i){
+
+    printf("main thread : %llu\n", pthread_self());
+
+    for(int i = 0; i < thread_num; ++i){
         pthread_create(&workers[i], NULL, thread_work, tasks);
     }
 
-    while (fscanf(fin, "%c %llu\n", &action, &num) == 2) {
+    pthread_barrier_wait(&barrier);
+
+    while (fscanf(fin, "%c %lu\n", &action, &num) == 2) {
         task &= 0;
         printf("read : %c %ld\n", action, num);
         if (action == 'i') {            // insert
@@ -63,19 +63,20 @@ void *thread_main(void *args){
         //pthread_mutex_lock(&mtx);
         tasks->push(task);
         //pthread_mutex_unlock(&mtx);
-        cout << "main : one wake up" << endl;
-        if(pthread_cond_signal(&cond)) printf("wake up error\n");
+        pthread_cond_signal(&cond);     
     }
-    tasks->print();
+    
     while(!(tasks->empty())) pthread_cond_signal(&cond);
 
     done = true;
     pthread_cond_broadcast(&cond);
-
-    for(int i = 0; i< thread_num; ++i){
-        pthread_join(workers[i], (void **)&status);
+    
+    for(int i = 0; i < thread_num; ++i){
+        pthread_join(workers[i], NULL);
     }
+
     fclose(fin);
+    tasks->print();
     pthread_mutex_destroy(&mtx);
     pthread_cond_destroy(&cond);
     pthread_barrier_destroy(&barrier);
@@ -93,6 +94,10 @@ int main(int argc, char** argv){
     TaskQueue tasks(10, 1);
 
     clock_gettime( CLOCK_REALTIME, &start);
+
+    pthread_barrier_init(&barrier, NULL, thread_num);
+    pthread_mutex_init(&mtx, NULL);
+    pthread_cond_init(&cond, NULL);
 
     pthread_create(&tmain, NULL, thread_main, &tasks);
     pthread_join(tmain, (void **)&status);
