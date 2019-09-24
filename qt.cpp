@@ -82,9 +82,6 @@ void *thread_main(void *args){
     tasks->print();
 
     fclose(fin);
-    pthread_mutex_destroy(&mtx);
-    pthread_cond_destroy(&cond);
-    pthread_barrier_destroy(&barrier);
     pthread_exit(NULL);
 }
 
@@ -102,5 +99,8 @@ int main(int argc, char** argv){
 
     pthread_create(&tmain, NULL, thread_main, &tasks);
     pthread_join(tmain, NULL);
-    
+
+    pthread_barrier_destroy(&barrier);
+    pthread_mutex_destroy(&mtx);
+    pthread_cond_destroy(&cond);
 }
