@@ -1,15 +1,10 @@
-#include <cstdlib>
 #include <cstdio>
-#include <climits>
-#include <unistd.h>
-#include <cstdint>
+#include <cstdlib>
 #include <cstring>
-#include <chrono>
-#include <iostream>
+#include <climits>
+#include <cstdint>
+#include <unistd.h>
 #include <pthread.h>
-
-
-using namespace std;
 
 enum class Flag: uint64_t{ insert = (1ULL << 62), query = (1ULL << 63), wait = (3ULL << 62)};
 
@@ -17,20 +12,22 @@ class TaskQueue
 {
 public: 
 
-    uint64_t ERROR = (3ULL << 62);
+    const uint64_t ERROR = (3ULL << 62);
 
-    TaskQueue(int _size, int _v){
+    TaskQueue(int _size){
         size =  _size  * 2 + 1;
         head = 0;
         tail = 0;
         arr = new uint64_t[size];
-        pthread_mutex_init(&mtx, NULL);
         pthread_rwlock_init(&rwlock, NULL);
-        v = _v;
+    }
+
+    ~TaskQueue(){
+        delete[] arr;
+        pthread_rwlock_destroy(&rwlock);
     }
 
     void push(uint64_t _value){
-        //pthread_mutex_lock(&mtx);
         pthread_rwlock_wrlock(&rwlock);
         if((tail + 1)  %  size == head){
             size *= 2;
@@ -41,24 +38,16 @@ public:
         }
         tail = (tail + 1) % size;
         arr[tail] = _value;
-        if(v) printf("%lu %d inserted\n", _value >> 62, (int)_value);
-        //pthread_mutex_unlock(&mtx);
         pthread_rwlock_unlock(&rwlock);
     }
 
     uint64_t pop(){
         uint64_t hval = ERROR;
-        //pthread_mutex_lock(&mtx);
         pthread_rwlock_wrlock(&rwlock);
         if(head != tail){
             head = (head + 1) % size;
             hval = arr[head];
         }
-        if(v){
-            if(hval == ERROR) printf("pop error\n");
-            else printf("%lu %d popped\n", hval >> 62, (int)hval);
-        }
-        //pthread_mutex_unlock(&mtx);
         pthread_rwlock_unlock(&rwlock);
         return hval;
     }
@@ -82,15 +71,9 @@ public:
     void print(){
         printf("head : %d tail : %d size : %d\n", head, tail, size);
         for(int i = 0; i < size; ++i){
-            printf("(%u %u) ", (arr[i] >> 62), (uint32_t)arr[i]);
+            printf("(%u %u) ", (uint32_t)(arr[i] >> 62), (uint32_t)arr[i]);
         }
         printf("\n");
-    }
-
-    ~TaskQueue(){
-        delete[] arr;
-        pthread_mutex_destroy(&mtx);
-        pthread_rwlock_destroy(&rwlock);
     }
 
 protected:
@@ -98,7 +81,5 @@ protected:
     uint32_t tail;
     uint32_t size;
     uint64_t * arr;
-    pthread_mutex_t mtx;
     pthread_rwlock_t rwlock;
-    bool v;
 };
