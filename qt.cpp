@@ -4,6 +4,7 @@
 
 char *fn;
 int thread_num;
+int thread_cnt;
 bool done = false;
 pthread_mutex_t mtx;
 pthread_cond_t cond;
@@ -20,12 +21,13 @@ void *thread_work(void * args){
         task &= 0;
         pthread_mutex_lock(&mtx);
         pthread_cond_wait(&cond, &mtx);
-        while(!(tasks->empty())){
+        if(!(tasks->empty())){
             task = tasks->pop();
             printf("%lu : %u %u\n", pthread_self(), (uint32_t)(task >> 62), (uint32_t) task);
         }
         pthread_mutex_unlock(&mtx);
     }
+    ++thread_cnt;
     printf("%lu finished\n", pthread_self());
     pthread_exit(NULL);
 }
@@ -50,7 +52,6 @@ void *thread_main(void *args){
 
     while (fscanf(fin, "%c %lu\n", &action, &num) == 2) {
         task &= 0;
-        printf("read : %c %ld\n", action, num);
         switch (action){
             case 'i':
                 task = static_cast<uint64_t>(Flag::insert) | num;
@@ -72,9 +73,9 @@ void *thread_main(void *args){
     while(!(tasks->empty())) pthread_cond_signal(&cond);
 
     done = true;
+    while(thread_cnt != thread_num) pthread_cond_signal(&cond);
 
     for(int i = 0; i < thread_num; ++i){
-        pthread_cond_broadcast(&cond);
         pthread_join(workers[i], NULL);
     }
 
