@@ -7,24 +7,24 @@ int thread_num;
 bool done = false;
 pthread_mutex_t mtx;
 pthread_cond_t cond;
-pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;
 pthread_barrier_t barrier;
 
 void *thread_work(void * args){
     uint64_t task;
     TaskQueue *tasks = (TaskQueue *)args;
     printf("%lu created\n", pthread_self());
-    //pthread_barrier_wait(&barrier);
+
+    pthread_barrier_wait(&barrier);
+
     while(!done){
         task &= 0;
         pthread_mutex_lock(&mtx);
         pthread_cond_wait(&cond, &mtx);
-        if(!(tasks->empty())){
+        while(!(tasks->empty())){
             task = tasks->pop();
             printf("%lu : %u %u\n", pthread_self(), (uint32_t)(task >> 62), (uint32_t) task);
         }
         pthread_mutex_unlock(&mtx);
-        
     }
     printf("%lu finished\n", pthread_self());
     pthread_exit(NULL);
@@ -45,6 +45,8 @@ void *thread_main(void *args){
     for(int i = 0; i < thread_num; ++i){
         pthread_create(&workers[i], NULL, thread_work, tasks);
     }
+
+    pthread_barrier_wait(&barrier);
 
     while (fscanf(fin, "%c %lu\n", &action, &num) == 2) {
         task &= 0;
@@ -70,9 +72,9 @@ void *thread_main(void *args){
     while(!(tasks->empty())) pthread_cond_signal(&cond);
 
     done = true;
-    pthread_cond_broadcast(&cond);
 
     for(int i = 0; i < thread_num; ++i){
+        pthread_cond_broadcast(&cond);
         pthread_join(workers[i], NULL);
     }
 
@@ -93,7 +95,7 @@ int main(int argc, char** argv){
     pthread_t tmain;
     TaskQueue tasks(10);
 
-    pthread_barrier_init(&barrier, NULL, thread_num);
+    pthread_barrier_init(&barrier, NULL, thread_num + 1);
     pthread_mutex_init(&mtx, NULL);
     pthread_cond_init(&cond, NULL);
 
