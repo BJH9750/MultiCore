@@ -25,12 +25,13 @@ public:
         tail = 0;
         arr = new uint64_t[size];
         pthread_mutex_init(&mtx, NULL);
-
+        pthread_rwlock_init(&rwlock, NULL);
         v = _v;
     }
 
     void push(uint64_t _value){
-        pthread_mutex_lock(&mtx);
+        //pthread_mutex_lock(&mtx);
+        pthread_rwlock_wrlock(&rwlock);
         if((tail + 1)  %  size == head){
             size *= 2;
             uint64_t *tmp = new uint64_t[size];
@@ -41,12 +42,14 @@ public:
         tail = (tail + 1) % size;
         arr[tail] = _value;
         if(v) printf("%lu %d inserted\n", _value >> 62, (int)_value);
-        pthread_mutex_unlock(&mtx);
+        //pthread_mutex_unlock(&mtx);
+        pthread_rwlock_unlock(&rwlock);
     }
 
     uint64_t pop(){
         uint64_t hval = ERROR;
-        pthread_mutex_lock(&mtx);
+        //pthread_mutex_lock(&mtx);
+        pthread_rwlock_wrlock(&rwlock);
         if(head != tail){
             head = (head + 1) % size;
             hval = arr[head];
@@ -55,8 +58,8 @@ public:
             if(hval == ERROR) printf("pop error\n");
             else printf("%lu %d popped\n", hval >> 62, (int)hval);
         }
-        
-        pthread_mutex_unlock(&mtx);
+        //pthread_mutex_unlock(&mtx);
+        pthread_rwlock_unlock(&rwlock);
         return hval;
     }
 
@@ -69,7 +72,11 @@ public:
     }
 
     bool empty(){
-        return head == tail;
+        bool isEmpty;
+        pthread_rwlock_rdlock(&rwlock);
+        isEmpty = (head == tail);
+        pthread_rwlock_unlock(&rwlock);
+        return isEmpty;
     }
 
     void print(){
@@ -83,6 +90,7 @@ public:
     ~TaskQueue(){
         delete[] arr;
         pthread_mutex_destroy(&mtx);
+        pthread_rwlock_destroy(&rwlock);
     }
 
 protected:
@@ -91,5 +99,6 @@ protected:
     uint32_t size;
     uint64_t * arr;
     pthread_mutex_t mtx;
+    pthread_rwlock_t rwlock;
     bool v;
 };

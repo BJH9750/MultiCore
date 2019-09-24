@@ -80,6 +80,7 @@ void *thread_main(void *args){
     pthread_mutex_destroy(&mtx);
     pthread_cond_destroy(&cond);
     pthread_barrier_destroy(&barrier);
+    pthread_exit(NULL);
 }
 
 
@@ -87,23 +88,23 @@ void *thread_main(void *args){
 int main(int argc, char** argv){
     thread_num = atoi(argv[2]);
     fn = argv[1];
-
+    int v = atoi(argv[3]);
     struct timespec start, stop;
     pthread_t tmain;
     int status;
-    TaskQueue tasks(10, 1);
+    TaskQueue tasks(10, v);
 
-    clock_gettime( CLOCK_REALTIME, &start);
+    //clock_gettime( CLOCK_REALTIME, &start);
 
     pthread_barrier_init(&barrier, NULL, thread_num);
     pthread_mutex_init(&mtx, NULL);
     pthread_cond_init(&cond, NULL);
 
     pthread_create(&tmain, NULL, thread_main, &tasks);
-    pthread_join(tmain, (void **)&status);
+    pthread_join(tmain, NULL);
     
-    clock_gettime( CLOCK_REALTIME, &stop);
+    //clock_gettime( CLOCK_REALTIME, &stop);
 
-    cout << "Elapsed time: " << (stop.tv_sec - start.tv_sec) + ((double) (stop.tv_nsec - start.tv_nsec))/1000000000 << " sec" << endl;
+    //cout << "Elapsed time: " << (stop.tv_sec - start.tv_sec) + ((double) (stop.tv_nsec - start.tv_nsec))/1000000000 << " sec" << endl;
     
 }
