@@ -14,17 +14,17 @@ void *thread_work(void * args){
     uint64_t task;
     TaskQueue *tasks = (TaskQueue *)args;
     printf("%llu created\n", pthread_self());
-    pthread_barrier_wait(&barrier);
+    //pthread_barrier_wait(&barrier);
     while(!done){
         task &= 0;
         pthread_mutex_lock(&mtx);
-        if(pthread_cond_wait(&cond, &mtx)) printf("worker wake up failed\n");
+        pthread_cond_wait(&cond, &mtx);
         if(!(tasks->empty())){
             task = tasks->pop();
             printf("%llu : %u %u\n", pthread_self(), task >> 62, (uint32_t) task);
         }
         pthread_mutex_unlock(&mtx);
-        //if(done) break;
+        
     }
     printf("%llu finished\n", pthread_self());
     pthread_exit(NULL);
@@ -46,8 +46,6 @@ void *thread_main(void *args){
         pthread_create(&workers[i], NULL, thread_work, tasks);
     }
 
-    pthread_barrier_wait(&barrier);
-
     while (fscanf(fin, "%c %lu\n", &action, &num) == 2) {
         task &= 0;
         printf("read : %c %ld\n", action, num);
@@ -60,9 +58,7 @@ void *thread_main(void *args){
         }else {
             printf("ERROR: Unrecognized action: '%c'\n", action);
         }
-        //pthread_mutex_lock(&mtx);
         tasks->push(task);
-        //pthread_mutex_unlock(&mtx);
         pthread_cond_signal(&cond);     
     }
     
@@ -70,8 +66,9 @@ void *thread_main(void *args){
 
     done = true;
     pthread_cond_broadcast(&cond);
-    
+
     for(int i = 0; i < thread_num; ++i){
+        
         pthread_join(workers[i], NULL);
     }
 
