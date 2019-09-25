@@ -6,19 +6,20 @@
 #include <unistd.h>
 #include <pthread.h>
 
-enum class Flag: uint64_t{ insert = (1ULL << 62), query = (1ULL << 63), wait = (3ULL << 62)};
+enum class Flag: uint32_t{ insert = (1U << 30), query = (1U << 31), wait = (3U << 30)}; // 01XXXXX, 10XXXXX, 11XXXXX
+const uint32_t mask = (1U << 30) - 1;
 
 class TaskQueue
 {
 public: 
 
-    const uint64_t ERROR = (3ULL << 62);
+    const uint32_t ERROR = (3U << 30);
 
     TaskQueue(int _size){
         size =  _size  * 2 + 1;
         head = 0;
         tail = 0;
-        arr = new uint64_t[size];
+        arr = new uint32_t[size];
         pthread_rwlock_init(&rwlock, NULL);
     }
 
@@ -27,12 +28,12 @@ public:
         pthread_rwlock_destroy(&rwlock);
     }
 
-    void push(uint64_t _value){
+    void push(uint32_t _value){
         pthread_rwlock_wrlock(&rwlock);
         if((tail + 1)  %  size == head){
             size *= 2;
-            uint64_t *tmp = new uint64_t[size];
-            memcpy(tmp, arr, (size / 2) * sizeof(uint64_t));
+            uint32_t *tmp = new uint32_t[size];
+            memcpy(tmp, arr, (size / 2) * sizeof(uint32_t));
             delete[] arr;
             arr = tmp;
         }
@@ -41,8 +42,8 @@ public:
         pthread_rwlock_unlock(&rwlock);
     }
 
-    uint64_t pop(){
-        uint64_t hval = ERROR;
+    uint32_t pop(){
+        uint32_t hval = ERROR;
         pthread_rwlock_wrlock(&rwlock);
         if(head != tail){
             head = (head + 1) % size;
@@ -71,7 +72,7 @@ public:
     void print(){
         printf("head : %d tail : %d size : %d\n", head, tail, size);
         for(int i = 0; i < size; ++i){
-            printf("(%u %u) ", (uint32_t)(arr[i] >> 62), (uint32_t)arr[i]);
+            printf("(%u %u) ", (arr[i] >> 30), (arr[i] << 2) >> 2);
         }
         printf("\n");
     }
@@ -80,6 +81,6 @@ protected:
     uint32_t head;
     uint32_t tail;
     uint32_t size;
-    uint64_t * arr;
+    uint32_t * arr;
     pthread_rwlock_t rwlock;
 };

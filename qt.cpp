@@ -1,4 +1,5 @@
 #include "taskqueue.h"
+#include "skiplist2.h"
 #include <time.h>
 #include <string>
 
@@ -9,9 +10,10 @@ bool done = false;
 pthread_mutex_t mtx;
 pthread_cond_t cond;
 pthread_barrier_t barrier;
+skiplist<uint32_t, uint32_t> list(0, 1000000);
 
 void *thread_work(void * args){
-    uint64_t task;
+    uint32_t task;
     TaskQueue *tasks = (TaskQueue *)args;
     printf("%lu created\n", pthread_self());
 
@@ -21,11 +23,33 @@ void *thread_work(void * args){
         task &= 0;
         pthread_mutex_lock(&mtx);
         pthread_cond_wait(&cond, &mtx);
+        pthread_mutex_unlock(&mtx);
+
         if(!(tasks->empty())){
             task = tasks->pop();
-            printf("%lu : %u %u\n", pthread_self(), (uint32_t)(task >> 62), (uint32_t) task);
+            printf("%lu : %u %u\n", pthread_self(), (task >> 30), (task << 2) >> 2);
         }
-        pthread_mutex_unlock(&mtx);
+
+        /*auto flag = static_cast<Flag>(task & !mask);
+        task &= mask;
+        switch (flag){
+            case Flag::insert:
+                list.insert(task, task);
+                break;
+            case Flag::query:
+                if(list.find(task) != task)
+		            printf("ERROR: Not Found: %u\n", task);
+                break;
+            case Flag::wait:
+                struct timeval tv;
+                tv.tv_sec = task / 1000;
+                tv.tv_usec = task % 1000;
+                select(0, NULL, NULL, NULL, &tv);
+                break;
+            default:
+                printf("ERROR: Unrecognized action\n");
+                break;
+        }*/
     }
     ++thread_cnt;
     printf("%lu finished\n", pthread_self());
@@ -36,8 +60,8 @@ void *thread_main(void *args){
     TaskQueue *tasks = (TaskQueue *)args;
     
     char action;
-    uint64_t num;
-    uint64_t task;
+    uint32_t num;
+    uint32_t task;
 
     FILE* fin = fopen(fn, "r");
     pthread_t *workers = (pthread_t *)malloc(sizeof(pthread_t) * thread_num);
@@ -50,17 +74,17 @@ void *thread_main(void *args){
 
     pthread_barrier_wait(&barrier);
 
-    while (fscanf(fin, "%c %lu\n", &action, &num) == 2) {
+    while (fscanf(fin, "%c %u\n", &action, &num) == 2) {
         task &= 0;
         switch (action){
             case 'i':
-                task = static_cast<uint64_t>(Flag::insert) | num;
+                task = static_cast<uint32_t>(Flag::insert) | num;
                 break;
             case 'q':
-                task = static_cast<uint64_t>(Flag::query) | num;
+                task = static_cast<uint32_t>(Flag::query) | num;
                 break;
             case 'w':
-                task = static_cast<uint64_t>(Flag::wait) | num;
+                task = static_cast<uint32_t>(Flag::wait) | num;
                 break;
             default:
                 printf("ERROR: Unrecognized action: '%c'\n", action);
@@ -91,14 +115,21 @@ int main(int argc, char** argv){
 
     struct timespec start, stop;
     pthread_t tmain;
-    TaskQueue tasks(10);
+    TaskQueue tasks(thread_num);
 
     pthread_barrier_init(&barrier, NULL, thread_num + 1);
     pthread_mutex_init(&mtx, NULL);
     pthread_cond_init(&cond, NULL);
 
+    clock_gettime( CLOCK_REALTIME, &start);
+
     pthread_create(&tmain, NULL, thread_main, &tasks);
     pthread_join(tmain, NULL);
+
+    clock_gettime( CLOCK_REALTIME, &stop);
+
+    cout << "Elapsed time: " << (stop.tv_sec - start.tv_sec) + ((double) (stop.tv_nsec - start.tv_nsec))/BILLION << " sec" << endl;
+
 
     pthread_barrier_destroy(&barrier);
     pthread_mutex_destroy(&mtx);
