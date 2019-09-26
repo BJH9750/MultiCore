@@ -102,13 +102,16 @@ public:
         skiplist_node<K,V,MAXLEVEL>* update[MAXLEVEL];
         NodeType* currNode = m_pHeader;
 
+        //pthread_rwlock_rdlock(&skplock);
         for(int level = max_curr_level; level >= 1; --level){
             while (currNode->forwards[level]->key[0] <= searchKey){
                 currNode = currNode->forwards[level];
             }
             update[level] = currNode;
         }
-
+        //pthread_rwlock_unlock(&skplock);
+        //pthread_rwlock_wrlock(&skplock);
+        
 	    if(currNode->cnt < NPAIRS){
 	        currNode->insert(searchKey, newValue);
 	    }else{ // split
