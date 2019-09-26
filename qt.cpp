@@ -10,6 +10,7 @@ bool done = false;
 pthread_mutex_t mtx;
 pthread_cond_t cond;
 pthread_barrier_t barrier;
+
 skiplist<uint32_t, uint32_t> list(0, 1000000);
 
 void *thread_work(void * args){
@@ -23,33 +24,40 @@ void *thread_work(void * args){
         task &= 0;
         pthread_mutex_lock(&mtx);
         pthread_cond_wait(&cond, &mtx);
+        
+        if(!tasks->empty()) {
+            task = tasks->pop();
+        }
         pthread_mutex_unlock(&mtx);
 
-        if(!(tasks->empty())){
-            task = tasks->pop();
-            printf("%lu : %u %u\n", pthread_self(), (task >> 30), (task << 2) >> 2);
-        }
+        auto flag = static_cast<Flag>(task & mask_t);
+        task &= mask_v;
 
-        /*auto flag = static_cast<Flag>(task & !mask);
-        task &= mask;
         switch (flag){
             case Flag::insert:
-                list.insert(task, task);
+                printf("insert %u \n", task);
+                // pthread_rwlock_wrlock(&rwlock);
+                // list.insert(task, task);
+                // pthread_rwlock_unlock(&rwlock);
                 break;
             case Flag::query:
-                if(list.find(task) != task)
-		            printf("ERROR: Not Found: %u\n", task);
+                printf("query %u \n", task);
+                // pthread_rwlock_rdlock(&rwlock);
+                // if(list.find(task) != task)
+		        //     printf("ERROR: Not Found: %u\n", task);
+                // pthread_rwlock_unlock(&rwlock);
                 break;
             case Flag::wait:
-                struct timeval tv;
-                tv.tv_sec = task / 1000;
-                tv.tv_usec = task % 1000;
-                select(0, NULL, NULL, NULL, &tv);
+                printf("wait %u \n", task);
+                // struct timeval tv;
+                // tv.tv_sec = task / 1000;
+                // tv.tv_usec = task % 1000;
+                // select(0, NULL, NULL, NULL, &tv);
                 break;
             default:
-                printf("ERROR: Unrecognized action\n");
+                //printf("ERROR: Unrecognized action\n");
                 break;
-        }*/
+        }
     }
     ++thread_cnt;
     printf("%lu finished\n", pthread_self());
@@ -91,7 +99,7 @@ void *thread_main(void *args){
                 break;
         }
         tasks->push(task);
-        pthread_cond_signal(&cond);     
+        pthread_cond_signal(&cond);    
     }
     
     while(!(tasks->empty())) pthread_cond_signal(&cond);
@@ -103,7 +111,7 @@ void *thread_main(void *args){
         pthread_join(workers[i], NULL);
     }
 
-    tasks->print();
+    //tasks->print();
 
     fclose(fin);
     pthread_exit(NULL);
@@ -130,6 +138,7 @@ int main(int argc, char** argv){
 
     cout << "Elapsed time: " << (stop.tv_sec - start.tv_sec) + ((double) (stop.tv_nsec - start.tv_nsec))/BILLION << " sec" << endl;
 
+    tasks.print();
 
     pthread_barrier_destroy(&barrier);
     pthread_mutex_destroy(&mtx);
