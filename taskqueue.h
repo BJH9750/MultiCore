@@ -21,12 +21,15 @@ public:
         head = 0;
         tail = 0;
         arr = new uint32_t[size];
-        pthread_mutex_init(&tqlock, NULL);
+        pthread_mutexattr_init(&tqlockattr);
+        pthread_mutexattr_settype(&tqlockattr, PTHREAD_MUTEX_RECURSIVE);
+        pthread_mutex_init(&tqlock, &tqlockattr);
     }
 
     ~TaskQueue(){
         delete[] arr;
         pthread_mutex_destroy(&tqlock);
+        pthread_mutexattr_destroy(&tqlockattr);
     }
 
     void push(uint32_t _value){
@@ -44,8 +47,8 @@ public:
     }
 
     uint32_t pop(){
-        uint32_t hval = ERROR;
         //pthread_mutex_lock(&tqlock);
+        uint32_t hval = ERROR;
         if(head != tail){
             head = (head + 1) % size;
             hval = arr[head];
@@ -55,9 +58,8 @@ public:
     }
 
     bool empty(){
-        bool isEmpty;
         //pthread_mutex_lock(&tqlock);
-        isEmpty = (head == tail);
+        bool isEmpty = (head == tail);
         //pthread_mutex_unlock(&tqlock);
         return isEmpty;
     }
@@ -76,4 +78,5 @@ protected:
     uint32_t size;
     uint32_t * arr;
     pthread_mutex_t tqlock;
+    pthread_mutexattr_t tqlockattr;
 };

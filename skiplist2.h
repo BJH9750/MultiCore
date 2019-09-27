@@ -111,7 +111,7 @@ public:
         }
         //pthread_rwlock_unlock(&skplock);
         //pthread_rwlock_wrlock(&skplock);
-        
+
 	    if(currNode->cnt < NPAIRS){
 	        currNode->insert(searchKey, newValue);
 	    }else{ // split
@@ -190,6 +190,7 @@ public:
  
     std::string printList(){
 	    int i=0;
+        cout << "list" << endl;
         std::stringstream sstr;
         NodeType* currNode = m_pHeader; //->forwards[1];
         while ( currNode != m_pTail ) {

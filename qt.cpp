@@ -10,7 +10,7 @@ bool done = false;
 pthread_mutex_t mtx;
 pthread_cond_t cond;
 pthread_barrier_t barrier;
-
+pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;
 skiplist<uint32_t, uint32_t> list(0, 1000000);
 
 void *thread_work(void * args){
@@ -28,6 +28,7 @@ void *thread_work(void * args){
         if(!tasks->empty()) {
             task = tasks->pop();
         }
+
         pthread_mutex_unlock(&mtx);
 
         auto flag = static_cast<Flag>(task & mask_t);
@@ -35,24 +36,24 @@ void *thread_work(void * args){
 
         switch (flag){
             case Flag::insert:
-                printf("insert %u \n", task);
-                // pthread_rwlock_wrlock(&rwlock);
-                // list.insert(task, task);
-                // pthread_rwlock_unlock(&rwlock);
+                pthread_rwlock_wrlock(&rwlock);
+                printf("%lu insert %u \n",pthread_self(), task);
+                list.insert(task, task);
+                pthread_rwlock_unlock(&rwlock);
                 break;
             case Flag::query:
-                printf("query %u \n", task);
-                // pthread_rwlock_rdlock(&rwlock);
-                // if(list.find(task) != task)
-		        //     printf("ERROR: Not Found: %u\n", task);
-                // pthread_rwlock_unlock(&rwlock);
+                pthread_rwlock_rdlock(&rwlock);
+                printf("%lu query %u \n",pthread_self(), task);
+                if(list.find(task) != task)
+		            printf("ERROR: Not Found: %u\n", task);
+                pthread_rwlock_unlock(&rwlock);
                 break;
             case Flag::wait:
-                printf("wait %u \n", task);
-                // struct timeval tv;
-                // tv.tv_sec = task / 1000;
-                // tv.tv_usec = task % 1000;
-                // select(0, NULL, NULL, NULL, &tv);
+                printf("%lu wait %u \n",pthread_self(), task);
+                struct timeval tv;
+                tv.tv_sec = task / 1000;
+                tv.tv_usec = task % 1000;
+                select(0, NULL, NULL, NULL, &tv);
                 break;
             default:
                 //printf("ERROR: Unrecognized action\n");
@@ -98,11 +99,22 @@ void *thread_main(void *args){
                 printf("ERROR: Unrecognized action: '%c'\n", action);
                 break;
         }
+        pthread_mutex_lock(&mtx);
         tasks->push(task);
-        pthread_cond_signal(&cond);    
+        pthread_cond_signal(&cond);   
+        pthread_mutex_unlock(&mtx); 
     }
     
-    while(!(tasks->empty())) pthread_cond_signal(&cond);
+    while(true){
+        pthread_mutex_lock(&mtx);
+        if(tasks->empty()){
+            pthread_mutex_unlock(&mtx); 
+            break;
+        }
+        pthread_cond_signal(&cond);
+        pthread_mutex_unlock(&mtx); 
+    }
+    //while(!(tasks->empty())) pthread_cond_signal(&cond);
 
     done = true;
     while(thread_cnt != thread_num) pthread_cond_signal(&cond);
@@ -110,8 +122,6 @@ void *thread_main(void *args){
     for(int i = 0; i < thread_num; ++i){
         pthread_join(workers[i], NULL);
     }
-
-    //tasks->print();
 
     fclose(fin);
     pthread_exit(NULL);
@@ -139,7 +149,7 @@ int main(int argc, char** argv){
     cout << "Elapsed time: " << (stop.tv_sec - start.tv_sec) + ((double) (stop.tv_nsec - start.tv_nsec))/BILLION << " sec" << endl;
 
     tasks.print();
-
+    cout << list.printList() << endl;
     pthread_barrier_destroy(&barrier);
     pthread_mutex_destroy(&mtx);
     pthread_cond_destroy(&cond);
