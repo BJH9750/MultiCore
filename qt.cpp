@@ -12,11 +12,12 @@ pthread_cond_t cond;
 pthread_barrier_t barrier;
 pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;
 skiplist<uint32_t, uint32_t> list(0, 1000000);
+int verbose = 0;
 
 void *thread_work(void * args){
     uint32_t task;
     TaskQueue *tasks = (TaskQueue *)args;
-    printf("%lu created\n", pthread_self());
+    if(verbose) printf("%lu created\n", pthread_self());
 
     pthread_barrier_wait(&barrier);
 
@@ -38,21 +39,21 @@ void *thread_work(void * args){
             //case Flag::insert:
             case INSERT:
                 pthread_rwlock_wrlock(&rwlock);
-                printf("%lu insert %u \n",pthread_self(), task);
+                if(verbose) printf("%lu insert %u \n",pthread_self(), task);
                 list.insert(task, task);
                 pthread_rwlock_unlock(&rwlock);
                 break;
             //case Flag::query:
             case QUERY:
                 pthread_rwlock_rdlock(&rwlock);
-                printf("%lu query %u \n",pthread_self(), task);
+                if(verbose) printf("%lu query %u \n",pthread_self(), task);
                 if(list.find(task) != task)
 		            printf("ERROR: Not Found: %u\n", task);
                 pthread_rwlock_unlock(&rwlock);
                 break;
             //case Flag::wait:
             case WAIT:
-                printf("%lu wait %u \n",pthread_self(), task);
+                if(verbose) printf("%lu wait %u \n",pthread_self(), task);
                 struct timeval tv;
                 tv.tv_sec = task / 1000;
                 tv.tv_usec = task % 1000;
@@ -64,7 +65,7 @@ void *thread_work(void * args){
         }
     }
     ++thread_cnt;
-    printf("%lu finished\n", pthread_self());
+    if(verbose) printf("%lu finished\n", pthread_self());
     pthread_exit(NULL);
 }
 
@@ -78,7 +79,7 @@ void *thread_main(void *args){
     FILE* fin = fopen(fn, "r");
     pthread_t *workers = (pthread_t *)malloc(sizeof(pthread_t) * thread_num);
 
-    printf("main thread : %lu\n", pthread_self());
+    if(verbose) printf("main thread : %lu\n", pthread_self());
 
     for(int i = 0; i < thread_num; ++i){
         pthread_create(&workers[i], NULL, thread_work, tasks);
@@ -102,7 +103,7 @@ void *thread_main(void *args){
                 task = WAIT | num;
                 break;
             default:
-                printf("ERROR: Unrecognized action: '%c'\n", action);
+                if(verbose) printf("ERROR: Unrecognized action: '%c'\n", action);
                 break;
         }
         pthread_mutex_lock(&mtx);
@@ -136,7 +137,7 @@ void *thread_main(void *args){
 int main(int argc, char** argv){
     thread_num = atoi(argv[2]);
     fn = argv[1];
-
+    if(argv[3] != NULL) verbose = atoi(argv[3]);
     struct timespec start, stop;
     pthread_t tmain;
     TaskQueue tasks(thread_num);
@@ -145,16 +146,16 @@ int main(int argc, char** argv){
     pthread_mutex_init(&mtx, NULL);
     pthread_cond_init(&cond, NULL);
 
-    clock_gettime( CLOCK_REALTIME, &start);
+    //clock_gettime( CLOCK_REALTIME, &start);
 
     pthread_create(&tmain, NULL, thread_main, &tasks);
     pthread_join(tmain, NULL);
 
-    clock_gettime( CLOCK_REALTIME, &stop);
+    //clock_gettime( CLOCK_REALTIME, &stop);
 
-    cout << "Elapsed time: " << (stop.tv_sec - start.tv_sec) + ((double) (stop.tv_nsec - start.tv_nsec))/BILLION << " sec" << endl;
+    //cout << "Elapsed time: " << (stop.tv_sec - start.tv_sec) + ((double) (stop.tv_nsec - start.tv_nsec))/BILLION << " sec" << endl;
 
-    tasks.print();
+    if(verbose) tasks.print();
     cout << list.printList() << endl;
     pthread_barrier_destroy(&barrier);
     pthread_mutex_destroy(&mtx);
