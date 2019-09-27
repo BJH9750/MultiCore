@@ -31,24 +31,27 @@ void *thread_work(void * args){
 
         pthread_mutex_unlock(&mtx);
 
-        auto flag = static_cast<Flag>(task & mask_t);
+        auto flag = task & mask_t;//static_cast<Flag>(task & mask_t);
         task &= mask_v;
 
         switch (flag){
-            case Flag::insert:
+            //case Flag::insert:
+            case INSERT:
                 pthread_rwlock_wrlock(&rwlock);
                 printf("%lu insert %u \n",pthread_self(), task);
                 list.insert(task, task);
                 pthread_rwlock_unlock(&rwlock);
                 break;
-            case Flag::query:
+            //case Flag::query:
+            case QUERY:
                 pthread_rwlock_rdlock(&rwlock);
                 printf("%lu query %u \n",pthread_self(), task);
                 if(list.find(task) != task)
 		            printf("ERROR: Not Found: %u\n", task);
                 pthread_rwlock_unlock(&rwlock);
                 break;
-            case Flag::wait:
+            //case Flag::wait:
+            case WAIT:
                 printf("%lu wait %u \n",pthread_self(), task);
                 struct timeval tv;
                 tv.tv_sec = task / 1000;
@@ -87,13 +90,16 @@ void *thread_main(void *args){
         task &= 0;
         switch (action){
             case 'i':
-                task = static_cast<uint32_t>(Flag::insert) | num;
+                //task = static_cast<uint32_t>(Flag::insert) | num;
+                task = INSERT | num;
                 break;
             case 'q':
-                task = static_cast<uint32_t>(Flag::query) | num;
+                //task = static_cast<uint32_t>(Flag::query) | num;
+                task = QUERY | num;
                 break;
             case 'w':
-                task = static_cast<uint32_t>(Flag::wait) | num;
+                //task = static_cast<uint32_t>(Flag::wait) | num;
+                task = WAIT | num;
                 break;
             default:
                 printf("ERROR: Unrecognized action: '%c'\n", action);
