@@ -24,26 +24,22 @@ void *thread_work(void * args){
     while(!done){
         task &= 0;
         pthread_mutex_lock(&mtx);
-        pthread_cond_wait(&cond, &mtx);
+        while(tasks->empty() && !done)
+            pthread_cond_wait(&cond, &mtx);
         
-        if(!tasks->empty()) {
-            task = tasks->pop();
-        }
-
+        task = tasks->pop();
         pthread_mutex_unlock(&mtx);
 
-        auto flag = task & mask_t;//static_cast<Flag>(task & mask_t);
+        auto flag = task & mask_t;
         task &= mask_v;
-
+        if(verbose) printf("%lu %u \n",pthread_self(), task);
         switch (flag){
-            //case Flag::insert:
             case INSERT:
                 pthread_rwlock_wrlock(&rwlock);
                 if(verbose) printf("%lu insert %u \n",pthread_self(), task);
                 list.insert(task, task);
                 pthread_rwlock_unlock(&rwlock);
                 break;
-            //case Flag::query:
             case QUERY:
                 pthread_rwlock_rdlock(&rwlock);
                 if(verbose) printf("%lu query %u \n",pthread_self(), task);
@@ -52,7 +48,6 @@ void *thread_work(void * args){
 		                printf("ERROR: Not Found: %u\n", task);
                 pthread_rwlock_unlock(&rwlock);
                 break;
-            //case Flag::wait:
             case WAIT:
                 if(verbose) printf("%lu wait %u \n",pthread_self(), task);
                 struct timeval tv;
@@ -61,7 +56,6 @@ void *thread_work(void * args){
                 select(0, NULL, NULL, NULL, &tv);
                 break;
             default:
-                //printf("ERROR: Unrecognized action\n");
                 break;
         }
     }
@@ -92,28 +86,26 @@ void *thread_main(void *args){
         task &= 0;
         switch (action){
             case 'i':
-                //task = static_cast<uint32_t>(Flag::insert) | num;
                 task = INSERT | num;
                 break;
             case 'q':
-                //task = static_cast<uint32_t>(Flag::query) | num;
                 task = QUERY | num;
                 break;
             case 'w':
-                //task = static_cast<uint32_t>(Flag::wait) | num;
                 task = WAIT | num;
                 break;
             default:
                 if(verbose) printf("ERROR: Unrecognized action: '%c'\n", action);
                 break;
         }
+
         pthread_mutex_lock(&mtx);
         tasks->push(task);
         pthread_cond_signal(&cond);   
         pthread_mutex_unlock(&mtx); 
     }
     
-    while(true){
+    /*while(true){
         pthread_mutex_lock(&mtx);
         if(tasks->empty()){
             pthread_mutex_unlock(&mtx); 
@@ -121,10 +113,12 @@ void *thread_main(void *args){
         }
         pthread_cond_signal(&cond);
         pthread_mutex_unlock(&mtx); 
-    }
-    //while(!(tasks->empty())) pthread_cond_signal(&cond);
+    }*/
+
+    while(!(tasks->empty())) pthread_cond_signal(&cond);
 
     done = true;
+
     while(thread_cnt != thread_num) pthread_cond_signal(&cond);
 
     for(int i = 0; i < thread_num; ++i){
