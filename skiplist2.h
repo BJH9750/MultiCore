@@ -14,13 +14,17 @@ class skiplist_node
 {
 public:
 
-    skiplist_node():forwards{}, cnt(0), cur(0){}
+    skiplist_node():cnt(0), cur(0){
+        for(int i = 0; i <= MAXLEVEL; ++i) forwards[i] = NULL;
+    }
  
-    skiplist_node(K searchKey):forwards{}, cnt(1), cur(0){
+    skiplist_node(K searchKey):cnt(1), cur(0){
+        for(int i = 0; i <= MAXLEVEL; ++i) forwards[i] = NULL;
         key[0] = searchKey;
     }
  
-    skiplist_node(K searchKey, V val):forwards{}, cnt(1), cur(0){
+    skiplist_node(K searchKey, V val):cnt(1), cur(0){
+        for(int i = 0; i <= MAXLEVEL; ++i) forwards[i] = NULL;
 	    key[0] = searchKey;
 	    value[0] = val;
     }
@@ -189,7 +193,6 @@ public:
     }
  
     std::string printList(){
-	    int i=0;
         std::stringstream sstr;
         NodeType* currNode = m_pHeader; //->forwards[1];
         while ( currNode != m_pTail ) {
