@@ -190,7 +190,6 @@ public:
  
     std::string printList(){
 	    int i=0;
-        cout << "list" << endl;
         std::stringstream sstr;
         NodeType* currNode = m_pHeader; //->forwards[1];
         while ( currNode != m_pTail ) {

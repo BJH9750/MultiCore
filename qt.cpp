@@ -13,6 +13,7 @@ pthread_barrier_t barrier;
 pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;
 skiplist<uint32_t, uint32_t> list(0, 1000000);
 int verbose = 0;
+long sum, odd;
 
 void *thread_work(void * args){
     uint32_t task;
@@ -83,6 +84,8 @@ void *thread_main(void *args){
     pthread_barrier_wait(&barrier);
 
     while (fscanf(fin, "%c %u\n", &action, &num) == 2) {
+        sum += num;
+        if (num % 2 == 1) odd++;
         task &= 0;
         switch (action){
             case 'i':
@@ -133,6 +136,7 @@ int main(int argc, char** argv){
     thread_num = atoi(argv[2]);
     fn = argv[1];
     if(argv[3] != NULL) verbose = atoi(argv[3]);
+
     struct timespec start, stop;
     pthread_t tmain;
     TaskQueue tasks(thread_num);
@@ -141,18 +145,22 @@ int main(int argc, char** argv){
     pthread_mutex_init(&mtx, NULL);
     pthread_cond_init(&cond, NULL);
 
-    //clock_gettime( CLOCK_REALTIME, &start);
+    clock_gettime( CLOCK_REALTIME, &start);
 
     pthread_create(&tmain, NULL, thread_main, &tasks);
     pthread_join(tmain, NULL);
 
-    //clock_gettime( CLOCK_REALTIME, &stop);
+    clock_gettime( CLOCK_REALTIME, &stop);
 
-    //cout << "Elapsed time: " << (stop.tv_sec - start.tv_sec) + ((double) (stop.tv_nsec - start.tv_nsec))/BILLION << " sec" << endl;
+    cout << list.printList() << endl;
+    cout << sum << " " << odd << endl;
+    cout << "Elapsed time: " << (stop.tv_sec - start.tv_sec) + ((double) (stop.tv_nsec - start.tv_nsec))/BILLION << " sec" << endl;
 
     if(verbose) tasks.print();
     cout << list.printList() << endl;
     pthread_barrier_destroy(&barrier);
     pthread_mutex_destroy(&mtx);
     pthread_cond_destroy(&cond);
+    
+    return (EXIT_SUCCESS);
 }
