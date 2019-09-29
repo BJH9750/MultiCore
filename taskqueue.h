@@ -6,7 +6,7 @@
 #include "typedef.h"
 //enum class Flag: uint32_t{ insert = (1U << 30), query = (1U << 31), wait = (3U << 30)}; // 01XXXXX, 10XXXXX, 11XXXXX
 //typedef unsigned int uint32_t;
-#define QUEUE_SIZE 10000
+#define QUEUE_SIZE 100000
 
 const uint32_t INSERT = (1U << 30), QUERY = (1U << 31), WAIT = (3U << 30);
 const uint32_t mask_v = (1U << 30) - 1;
@@ -23,19 +23,19 @@ public:
         tail = 0;
         active = 0;
         arr = new uint32_t[QUEUE_SIZE];
-        pthread_mutexattr_init(&tqlockattr);
-        pthread_mutexattr_settype(&tqlockattr, PTHREAD_MUTEX_RECURSIVE);
-        pthread_mutex_init(&tqlock, &tqlockattr);
-        pthread_cond_init(&pop_cv, NULL);
-        pthread_cond_init(&push_cv, NULL);
+        // pthread_mutexattr_init(&tqlockattr);
+        // pthread_mutexattr_settype(&tqlockattr, PTHREAD_MUTEX_RECURSIVE);
+        // pthread_mutex_init(&tqlock, &tqlockattr);
+        // pthread_cond_init(&pop_cv, NULL);
+        // pthread_cond_init(&push_cv, NULL);
     }
 
     ~TaskQueue(){
         delete[] arr;
-        pthread_mutex_destroy(&tqlock);
-        pthread_mutexattr_destroy(&tqlockattr);
-        pthread_cond_destroy(&push_cv);
-        pthread_cond_destroy(&pop_cv);
+        // pthread_mutex_destroy(&tqlock);
+        // pthread_mutexattr_destroy(&tqlockattr);
+        // pthread_cond_destroy(&push_cv);
+        // pthread_cond_destroy(&pop_cv);
     }
 
     void push(uint32_t _value){
@@ -52,9 +52,12 @@ public:
 
     bool empty(){
         //pthread_mutex_lock(&tqlock);
-        bool isEmpty = (head == tail);
         //pthread_mutex_unlock(&tqlock);
-        return isEmpty;
+        return (head == tail);
+    }
+
+    bool full(){
+        return (tail + 1)  %  QUEUE_SIZE == head;
     }
 
     void print(){
@@ -70,9 +73,8 @@ protected:
     uint32_t tail;
     uint32_t * arr;
     uint32_t active;
-    bool finish = false;
-    pthread_mutex_t tqlock;
-    pthread_mutexattr_t tqlockattr;
-    pthread_cond_t push_cv;
-    pthread_cond_t pop_cv;
+    // pthread_mutex_t tqlock;
+    // pthread_mutexattr_t tqlockattr;
+    // pthread_cond_t push_cv;
+    // pthread_cond_t pop_cv;
 };

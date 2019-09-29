@@ -9,6 +9,7 @@ int thread_cnt;
 bool done = false;
 pthread_mutex_t mtx;
 pthread_cond_t cond;
+pthread_cond_t full_cv;
 pthread_barrier_t barrier;
 pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;
 skiplist<uint32_t, uint32_t> list(0, 1000000);
@@ -29,6 +30,7 @@ void *thread_work(void * args){
             pthread_cond_wait(&cond, &mtx);
         
         task = tasks->pop();
+        pthread_cond_signal(&full_cv);
         pthread_mutex_unlock(&mtx);
 
         auto flag = task & mask_t;
@@ -103,6 +105,8 @@ void *thread_main(void *args){
         }
 
         pthread_mutex_lock(&mtx);
+        while(tasks->full())
+            pthread_cond_wait(&full_cv, &mtx);
         tasks->push(task);
         pthread_cond_signal(&cond);   
         pthread_mutex_unlock(&mtx); 
@@ -144,6 +148,7 @@ int main(int argc, char** argv){
     pthread_barrier_init(&barrier, NULL, thread_num + 1);
     pthread_mutex_init(&mtx, NULL);
     pthread_cond_init(&cond, NULL);
+    pthread_cond_init(&full_cv, NULL);
 
     clock_gettime( CLOCK_REALTIME, &start);
 
@@ -161,6 +166,7 @@ int main(int argc, char** argv){
     pthread_barrier_destroy(&barrier);
     pthread_mutex_destroy(&mtx);
     pthread_cond_destroy(&cond);
-    
+    pthread_cond_destroy(&full_cv);
+
     return (EXIT_SUCCESS);
 }
