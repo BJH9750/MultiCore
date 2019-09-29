@@ -193,17 +193,18 @@ public:
     }
  
     std::string printList(){
+        int i = 0;
         std::stringstream sstr;
         NodeType* currNode = m_pHeader; //->forwards[1];
-        while ( currNode != m_pTail ) {
+        while (currNode != m_pTail) {
             sstr << "(" ;
-            for(int i=0;i<currNode->cnt;i++){
-                sstr << currNode->key[i] << "," ;
-                }
+            for(int j = 0; j < currNode->cnt; ++j){
+                sstr << currNode->key[j] << "," ;
+            }
             sstr << ")";
             currNode = currNode->forwards[1];
-            i++;
-            if(i>200) break;
+            ++i;
+            if(i > 200) break;
         }
         return sstr.str();
     }
