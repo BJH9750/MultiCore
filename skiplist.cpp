@@ -62,7 +62,10 @@ void *thread_work(void * args){
                 break;
         }
     }
+    pthread_mutex_lock(&mtx);
     ++thread_cnt;
+    pthread_mutex_unlock(&mtx);
+    
     if(verbose) printf("%lu finished\n", pthread_self());
     pthread_exit(NULL);
 }
@@ -162,7 +165,6 @@ int main(int argc, char** argv){
     cout << "Elapsed time: " << (stop.tv_sec - start.tv_sec) + ((double) (stop.tv_nsec - start.tv_nsec))/BILLION << " sec" << endl;
 
     if(verbose) tasks.print();
-    cout << list.printList() << endl;
     pthread_barrier_destroy(&barrier);
     pthread_mutex_destroy(&mtx);
     pthread_cond_destroy(&cond);
