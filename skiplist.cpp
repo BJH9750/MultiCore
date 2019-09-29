@@ -33,7 +33,7 @@ void *thread_work(void * args){
         pthread_cond_signal(&full_cv);
         pthread_mutex_unlock(&mtx);
 
-        auto flag = task & mask_t;
+        uint32_t flag = task & mask_t;
         task &= mask_v;
         if(verbose) printf("%lu %u \n",pthread_self(), task);
         switch (flag){
