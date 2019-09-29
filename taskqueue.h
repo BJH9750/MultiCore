@@ -1,12 +1,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <climits>
-#include <cstdint>
 #include <unistd.h>
 #include <pthread.h>
-
+#include "typedef.h"
 //enum class Flag: uint32_t{ insert = (1U << 30), query = (1U << 31), wait = (3U << 30)}; // 01XXXXX, 10XXXXX, 11XXXXX
+//typedef unsigned int uint32_t;
+
 const uint32_t INSERT = (1U << 30), QUERY = (1U << 31), WAIT = (3U << 30);
 const uint32_t mask_v = (1U << 30) - 1;
 const uint32_t mask_t = (3U << 30);
