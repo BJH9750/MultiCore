@@ -48,7 +48,8 @@ void *thread_work(void * args){
                 pthread_rwlock_rdlock(&rwlock);
                 if(verbose) printf("%lu query %u \n",pthread_self(), task);
                 if(list.find(task) != task)
-		            printf("ERROR: Not Found: %u\n", task);
+                    if(verbose)
+		                printf("ERROR: Not Found: %u\n", task);
                 pthread_rwlock_unlock(&rwlock);
                 break;
             //case Flag::wait:
