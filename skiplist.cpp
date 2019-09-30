@@ -115,16 +115,6 @@ void *thread_main(void *args){
         pthread_mutex_unlock(&mtx); 
     }
     
-    /*while(true){
-        pthread_mutex_lock(&mtx);
-        if(tasks->empty()){
-            pthread_mutex_unlock(&mtx); 
-            break;
-        }
-        pthread_cond_signal(&cond);
-        pthread_mutex_unlock(&mtx); 
-    }*/
-
     while(!(tasks->empty())) pthread_cond_signal(&cond);
 
     done = true;

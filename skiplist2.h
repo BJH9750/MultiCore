@@ -3,7 +3,7 @@
 #include <pthread.h>
 
 #define BILLION  1000000000L
-#define NPAIRS  4
+#define NPAIRS  100
 
 using namespace std;
 
