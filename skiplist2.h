@@ -3,7 +3,7 @@
 #include <pthread.h>
 
 #define BILLION  1000000000L
-#define NPAIRS  4
+#define NPAIRS  100
 
 using namespace std;
 
@@ -14,13 +14,17 @@ class skiplist_node
 {
 public:
 
-    skiplist_node():forwards{}, cnt(0), cur(0){}
+    skiplist_node():cnt(0), cur(0){
+        for(int i = 0; i <= MAXLEVEL; ++i) forwards[i] = NULL;
+    }
  
-    skiplist_node(K searchKey):forwards{}, cnt(1), cur(0){
+    skiplist_node(K searchKey):cnt(1), cur(0){
+        for(int i = 0; i <= MAXLEVEL; ++i) forwards[i] = NULL;
         key[0] = searchKey;
     }
  
-    skiplist_node(K searchKey, V val):forwards{}, cnt(1), cur(0){
+    skiplist_node(K searchKey, V val):cnt(1), cur(0){
+        for(int i = 0; i <= MAXLEVEL; ++i) forwards[i] = NULL;
 	    key[0] = searchKey;
 	    value[0] = val;
     }
@@ -189,19 +193,18 @@ public:
     }
  
     std::string printList(){
-	    int i=0;
-        cout << "list" << endl;
+        int i = 0;
         std::stringstream sstr;
         NodeType* currNode = m_pHeader; //->forwards[1];
-        while ( currNode != m_pTail ) {
+        while (currNode != m_pTail) {
             sstr << "(" ;
-            for(int i=0;i<currNode->cnt;i++){
-                sstr << currNode->key[i] << "," ;
-                }
+            for(int j = 0; j < currNode->cnt; ++j){
+                sstr << currNode->key[j] << "," ;
+            }
             sstr << ")";
             currNode = currNode->forwards[1];
-            i++;
-            if(i>200) break;
+            ++i;
+            if(i > 200) break;
         }
         return sstr.str();
     }
