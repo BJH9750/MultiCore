@@ -1,3 +1,1 @@
-# MultiCore
-
-## Skiplist with taskqueue in multithread
+#Multicode Programming Assignment Repository
