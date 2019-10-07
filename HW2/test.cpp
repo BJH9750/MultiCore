@@ -11,13 +11,24 @@ void x(int k){
 
 int main(){
     omp_set_num_threads(5);
-    #pragma omp parallel
-    {
-        x(1);
-        x(2);
-        x(3);
-        x(4);
-        x(5);
+    #pragma omp parallel{
+        #pragma omp single{
+            #pragma omp task{
+                x(1);
+            }
+            #pragma omp task{
+                x(2);
+            }
+            #pragma omp task{
+                x(3);
+            }
+            #pragma omp task{
+                x(4);
+            }
+            #pragma omp task{
+                x(5);
+            }
+        }
     }
-
+    printf("asd\n");
 }
