@@ -11,21 +11,28 @@ void x(int k){
 
 int main(){
     omp_set_num_threads(5);
-    #pragma omp parallel{
-        #pragma omp single{
-            #pragma omp task{
+    #pragma omp parallel
+    {
+        #pragma omp single
+        {
+            #pragma omp task
+            {
                 x(1);
             }
-            #pragma omp task{
+            #pragma omp task
+            {
                 x(2);
             }
-            #pragma omp task{
+            #pragma omp task
+            {
                 x(3);
             }
-            #pragma omp task{
+            #pragma omp task
+            {
                 x(4);
             }
-            #pragma omp task{
+            #pragma omp task
+            {
                 x(5);
             }
         }
