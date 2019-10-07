@@ -33,7 +33,8 @@ int main(){
             {
                 x(5);
             }
-            #pragma omp barrier
+            
         }
+        #pragma omp barrier
     printf("asd\n");
 }
