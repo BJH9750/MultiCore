@@ -11,31 +11,29 @@ void x(int k){
 
 int main(){
     omp_set_num_threads(5);
-    #pragma omp parallel
+    #pragma omp parallel sections
     {
-        #pragma omp single
-        {
-            #pragma omp task
+            #pragma omp section
             {
                 x(1);
             }
-            #pragma omp task
+            #pragma omp section
             {
                 x(2);
             }
-            #pragma omp task
+            #pragma omp section
             {
                 x(3);
             }
-            #pragma omp task
+            #pragma omp section
             {
                 x(4);
             }
-            #pragma omp task
+            #pragma omp section
             {
                 x(5);
             }
+            #pragma omp barrier
         }
-    }
     printf("asd\n");
 }
