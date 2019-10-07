@@ -13,6 +13,11 @@ int main(){
     omp_set_num_threads(5);
     #pragma omp parallel
     {
-        x(omp_get_thread_num());
+        x(1);
+        x(2);
+        x(3);
+        x(4);
+        x(5);
     }
+
 }
