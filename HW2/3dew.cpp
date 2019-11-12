@@ -13,46 +13,35 @@ using namespace std;
 float c0 = -2.927222164;
 int mm = 5;
 
-void save(float *arr, int size){
-    static int cnt = 0;
-    char buf[10];
-    FILE *fp;
-    if(cnt < 10){
-        sprintf(buf, "%d", cnt);
-        fp = fopen(buf, "wb");
-        for(int i = 0; i < size; i++)
-            fwrite(arr, sizeof(float), size, fp);
-        fclose(fp);
-    }
-    
-}
+float *u, *v, *w, *up, *up1, *up2, 
+          *vp, *vp1, *vp2, *wp, *wp1, *wp2, 
+          *us, *us1, *us2, *vs, *vs1, *vs2,
+          *ws, *ws1, *ws2, *vpp, *density, *vss;
+
+float c[5][7];
+float *wave;
+float nshot,t0;
+float dtx,dtz,dtxz,dr1,dr2,dtx4,dtz4,dtxz4;
+int nx,ny,nz,lt,nedge;
+float frequency;
+float velmax;
+float dt;
+int ncx_shot1,ncy_shot1,ncz_shot;
+int ishot,ncy_shot,ncx_shot;
+float unit;
+int nxshot,nyshot,dxshot,dyshot;
+
+void free_all();
+void iterate(int iter);
 
 int main(int argc, char **argv)
 {
     int i,j,k,kk,kkk,l;
-    int nx,ny,nz,lt,nedge;
 
-    float frequency;
-    float velmax;
-    float dt;
-    int ncx_shot1,ncy_shot1,ncz_shot;
-    int ishot,ncy_shot,ncx_shot;
-    float unit;
-    int nxshot,nyshot,dxshot,dyshot;
     char infile[80],outfile[80],logfile[80],tmp[80];
     FILE  *fin, *fout, *flog;
     struct timeval start,end;
     float all_time;
-
-    float *u, *v, *w, *up, *up1, *up2, 
-          *vp, *vp1, *vp2, *wp, *wp1, *wp2, 
-          *us, *us1, *us2, *vs, *vs1, *vs2,
-          *ws, *ws1, *ws2, *vpp, *density, *vss;
-    float c[5][7];
-    float *wave;
-    float nshot,t0;
-    float dtx,dtz,dtxz,dr1,dr2,dtx4,dtz4,dtxz4;
-    float px,sx;
 
     if(argc<4)
     {
@@ -164,22 +153,24 @@ int main(int argc, char **argv)
     t0=1.0/frequency;
     
     omp_set_nested(1);
+    int idx, idx1, idx2, idx3;
     #pragma omp parallel for collapse(3)
     for(i = 0; i < nz; ++i){
         for(j = 0; j < ny; ++j){
             for(k = 0; k < nx; ++k){
+                idx = i*ny*nx+j*nx+k;
                 if(i < 210){
-                    vpp[i*ny*nx+j*nx+k] = 2300.;
-                    vss[i*ny*nx+j*nx+k] = 1232.;
-                    density[i*ny*nx+j*nx+k] = 1.;
+                    vpp[idx] = 2300.;
+                    vss[idx] = 1232.;
+                    density[idx] = 1.;
                 }else if(i >= 260){
-                    vpp[i*ny*nx+j*nx+k] = 3500.;
-                    vss[i*ny*nx+j*nx+k] = 1909.;
-                    density[i*ny*nx+j*nx+k] = 2.5;   
+                    vpp[idx] = 3500.;
+                    vss[idx] = 1909.;
+                    density[idx] = 2.5;   
                 }else{
-                    vpp[i*ny*nx+j*nx+k] = 2800.;
-                    vss[i*ny*nx+j*nx+k] = 1509.;
-                    density[i*ny*nx+j*nx+k] = 2.;
+                    vpp[idx] = 2800.;
+                    vss[idx] = 1509.;
+                    density[idx] = 2.;
                 }
             }
         }
@@ -234,187 +225,44 @@ int main(int argc, char **argv)
 	    // flog = fopen(logfile,"a");
         // fprintf(flog,"shot=%d\n",ishot);
 	    // fclose(flog);
-        #pragma omp parallel for collapse(3)
+        #pragma omp parallel for collapse(3) private (idx1)
         for(i = 0; i < nz; ++i){
             for(j = 0; j < ny; ++j){
                 for(k = 0; k < nx; ++k){
-                    u[i*ny*nx+j*nx+k] = 0.0f;
-                    v[i*ny*nx+j*nx+k] = 0.0f;
-                    w[i*ny*nx+j*nx+k] = 0.0f;
-                    up[i*ny*nx+j*nx+k] = 0.0f;
-                    up1[i*ny*nx+j*nx+k] = 0.0f;
-                    up2[i*ny*nx+j*nx+k] = 0.0f;
-                    vp[i*ny*nx+j*nx+k] = 0.0f;
-                    vp1[i*ny*nx+j*nx+k] = 0.0f;
-                    vp2[i*ny*nx+j*nx+k] = 0.0f;
-                    wp[i*ny*nx+j*nx+k] = 0.0f;
-                    wp1[i*ny*nx+j*nx+k] = 0.0f;
-                    wp2[i*ny*nx+j*nx+k] = 0.0f;
-                    us[i*ny*nx+j*nx+k] = 0.0f;
-                    us1[i*ny*nx+j*nx+k] = 0.0f;
-                    us2[i*ny*nx+j*nx+k] = 0.0f;
-                    vs[i*ny*nx+j*nx+k] = 0.0f;
-                    vs1[i*ny*nx+j*nx+k] = 0.0f;
-                    vs2[i*ny*nx+j*nx+k] = 0.0f;
-                    ws[i*ny*nx+j*nx+k] = 0.0f;
-                    ws1[i*ny*nx+j*nx+k] = 0.0f;
-                    ws2[i*ny*nx+j*nx+k] = 0.0f;
+                    idx1 = i*ny*nx+j*nx+k;
+                    u[idx1] = 0.0f;
+                    v[idx1] = 0.0f;
+                    w[idx1] = 0.0f;
+                    up[idx1] = 0.0f;
+                    up1[idx1] = 0.0f;
+                    up2[idx1] = 0.0f;
+                    vp[idx1] = 0.0f;
+                    vp1[idx1] = 0.0f;
+                    vp2[idx1] = 0.0f;
+                    wp[idx1] = 0.0f;
+                    wp1[idx1] = 0.0f;
+                    wp2[idx1] = 0.0f;
+                    us[idx1] = 0.0f;
+                    us1[idx1] = 0.0f;
+                    us2[idx1] = 0.0f;
+                    vs[idx1] = 0.0f;
+                    vs1[idx1] = 0.0f;
+                    vs2[idx1] = 0.0f;
+                    ws[idx1] = 0.0f;
+                    ws1[idx1] = 0.0f;
+                    ws2[idx1] = 0.0f;
                 }// for(k = 0; k < nx; ++k) end
             }// for(j = 0; j < ny; ++j) end
         }// for(i = 0; i < nz; ++i) end
 
         ncy_shot = ncy_shot1 + (ishot / nxshot) * dyshot;
         ncx_shot = ncx_shot1 + (ishot % nxshot) * dxshot;
-        int xmax, nleft, nright, nfront, nback, ntop, nbottom;
-
-        //#pragma omp parallel for ordered private(xmax, nleft, nright, nfront, nback, ntop, nbottom)
+        
         for(l = 1; l <= lt; ++l){
-            
-            xmax = (l * dt * velmax / unit) + 10;
-
-            nleft = ncx_shot - xmax;
-            nright = ncx_shot + xmax;
-            nfront = ncy_shot - xmax;
-            nback = ncy_shot + xmax;
-            ntop = ncz_shot - xmax;
-            nbottom = ncz_shot + xmax;
-            if(nleft < 5) nleft = 5;
-            if(nright > nx - 5) nright = nx - 5;
-            if(nfront < 5) nfront = 5;
-            if(nback > ny - 5) nback = ny - 5;
-            if(ntop < 5) ntop = 5;
-            if(nbottom > nz - 5) nbottom = nz - 5;
-
-            ntop = ntop - 1;
-            nfront = nfront - 1;
-            nleft = nleft - 1;
-            
-            #pragma omp parallel for collapse(3) ordered private(vvp2, vvs2, px, sx,tempux2,tempuy2,tempuz2,tempvx2,tempvy2,tempvz2,\
-                                                            tempwx2,tempwy2,tempwz2,tempuxz,tempuxy,tempvyz,tempvxy,tempwxz,tempwyz)
-            for(k = ntop; k < nbottom; ++k){
-                for(j = nfront; j < nback; ++j){
-                    for(i = nleft; i < nright; ++i){
-                        if(i==ncx_shot-1 && j==ncy_shot-1 && k==ncz_shot-1){
-                            px=1.;
-                            sx=0.;
-                        }else{
-                            px=0.;
-                            sx=0.;
-                        }
-
-                        vvp2=vpp[k*ny*nx+j*nx+i]*vpp[k*ny*nx+j*nx+i];
-                        vvs2=vss[k*ny*nx+j*nx+i]*vss[k*ny*nx+j*nx+i];
-
-
-                        tempux2=0.0f; tempuy2=0.0f; tempuz2=0.0f; tempvx2=0.0f; tempvy2=0.0f; tempvz2=0.0f; tempwx2=0.0f; tempwy2=0.0f; tempwz2=0.0f; 
-                        tempuxz=0.0f; tempuxy=0.0f; tempvyz=0.0f; tempvxy=0.0f; tempwxz=0.0f; tempwyz=0.0f;
-                        //u[nz][ny][nx]
-                        //u[a*ny*nx+b*nx+c]= u[a][b][c-1] 
-                        for(kk = 1; kk <= mm; ++kk){
-                            tempux2 = tempux2 + c[kk-1][0] * (u[k*ny*nx+j*nx+(i+kk)] + u[k*ny*nx+j*nx+(i-kk)]);
-                            tempuy2 = tempuy2 + c[kk-1][0] * (u[k*ny*nx+(j+kk)*nx+i] + u[k*ny*nx+(j-kk)*nx+i]);
-                            tempuz2 = tempuz2 + c[kk-1][0] * (u[(k+kk)*ny*nx+j*nx+i] + u[(k-kk)*ny*nx+j*nx+i]);
-
-                            tempvx2 = tempvx2 + c[kk-1][0] * (v[k*ny*nx+j*nx+(i+kk)] + v[k*ny*nx+j*nx+(i-kk)]);
-                            tempvy2 = tempvy2 + c[kk-1][0] * (v[k*ny*nx+(j+kk)*nx+i] + v[k*ny*nx+(j-kk)*nx+i]);
-                            tempvz2 = tempvz2 + c[kk-1][0] * (v[(k+kk)*ny*nx+j*nx+i] + v[(k-kk)*ny*nx+j*nx+i]);
-
-                            tempwx2 = tempwx2 + c[kk-1][0] * (w[k*ny*nx+j*nx+(i+kk)] + w[k*ny*nx+j*nx+(i-kk)]);
-                            tempwy2 = tempwy2 + c[kk-1][0] * (w[k*ny*nx+(j+kk)*nx+i] + w[k*ny*nx+(j-kk)*nx+i]);
-                            tempwz2  =tempwz2 + c[kk-1][0] * (w[(k+kk)*ny*nx+j*nx+i] + w[(k-kk)*ny*nx+j*nx+i]);
-
-                        } //for(kk=1;kk<=mm;kk++) end
-
-                        tempux2 = (tempux2+c0*u[k*ny*nx+j*nx+i])*vvp2*dtx*dtx;
-                        tempuy2 = (tempuy2+c0*u[k*ny*nx+j*nx+i])*vvs2*dtx*dtx;
-                        tempuz2 = (tempuz2+c0*u[k*ny*nx+j*nx+i])*vvs2*dtz*dtz;
-
-                        tempvx2 = (tempvx2+c0*v[k*ny*nx+j*nx+i])*vvs2*dtx*dtx;
-                        tempvy2 = (tempvy2+c0*v[k*ny*nx+j*nx+i])*vvp2*dtx*dtx;
-                        tempvz2 = (tempvz2+c0*v[k*ny*nx+j*nx+i])*vvs2*dtz*dtz;
-
-                        tempwx2 = (tempwx2+c0*w[k*ny*nx+j*nx+i])*vvs2*dtx*dtx;
-                        tempwy2 = (tempwy2+c0*w[k*ny*nx+j*nx+i])*vvs2*dtx*dtx;
-                        tempwz2 = (tempwz2+c0*w[k*ny*nx+j*nx+i])*vvp2*dtz*dtz;
-
-                        for(kk=1;kk<=mm;kk++){
-                            for(kkk=1;kkk<=mm;kkk++){
-                                tempuxz=tempuxz+c[kkk-1][1+kk]*(u[(k+kkk)*ny*nx+j*nx+(i+kk)]
-                                                -u[(k-kkk)*ny*nx+j*nx+(i+kk)]
-                                                +u[(k-kkk)*ny*nx+j*nx+(i-kk)]
-                                                -u[(k+kkk)*ny*nx+j*nx+(i-kk)]);
-                                tempuxy=tempuxy+c[kkk-1][1+kk]*(u[k*ny*nx+(j+kkk)*nx+(i+kk)]
-                                                -u[k*ny*nx+(j-kkk)*nx+(i+kk)]
-                                                +u[k*ny*nx+(j-kkk)*nx+(i-kk)]
-                                                -u[k*ny*nx+(j+kkk)*nx+(i-kk)]);
-
-                                tempvyz=tempvyz+c[kkk-1][1+kk]*(v[(k+kkk)*ny*nx+(j+kk)*nx+i]
-                                                -v[(k-kkk)*ny*nx+(j+kk)*nx+i]
-                                                +v[(k-kkk)*ny*nx+(j-kk)*nx+i]
-                                                -v[(k+kkk)*ny*nx+(j-kk)*nx+i]);
-                                tempvxy=tempvxy+c[kkk-1][1+kk]*(v[k*ny*nx+(j+kkk)*nx+(i+kk)]
-                                                -v[k*ny*nx+(j-kkk)*nx+(i+kk)]
-                                                +v[k*ny*nx+(j-kkk)*nx+(i-kk)]
-                                                -v[k*ny*nx+(j+kkk)*nx+(i-kk)]);
-
-                                tempwyz=tempwyz+c[kkk-1][1+kk]*(w[(k+kkk)*ny*nx+(j+kk)*nx+i]
-                                                -w[(k-kkk)*ny*nx+(j+kk)*nx+i]
-                                                +w[(k-kkk)*ny*nx+(j-kk)*nx+i]
-                                                -w[(k+kkk)*ny*nx+(j-kk)*nx+i]);
-                                tempwxz=tempwxz+c[kkk-1][1+kk]*(w[(k+kkk)*ny*nx+j*nx+(i+kk)]
-                                                -w[(k-kkk)*ny*nx+j*nx+(i+kk)]
-                                                +w[(k-kkk)*ny*nx+j*nx+(i-kk)]
-                                                -w[(k+kkk)*ny*nx+j*nx+(i-kk)]);
-                            } // for(kkk=1;kkk<=mm;kkk++) end
-                        } //for(kk=1;kk<=mm;kk++) end
-
-                        up[k*ny*nx+j*nx+i] = 2.*up1[k*ny*nx+j*nx+i]-up2[k*ny*nx+j*nx+i]
-                                        +tempux2+tempwxz*vvp2*dtz*dtx
-                                        +tempvxy*vvp2*dtz*dtx;
-                        vp[k*ny*nx+j*nx+i] = 2.*vp1[k*ny*nx+j*nx+i]-vp2[k*ny*nx+j*nx+i]
-                                        +tempvy2+tempuxy*vvp2*dtz*dtx
-                                        +tempwyz*vvp2*dtz*dtx;
-                        wp[k*ny*nx+j*nx+i] = 2.*wp1[k*ny*nx+j*nx+i]-wp2[k*ny*nx+j*nx+i]
-                                        +tempwz2+tempuxz*vvp2*dtz*dtx
-                                        +tempvyz*vvp2*dtz*dtx
-                                        +px*wave[l-1];
-                        us[k*ny*nx+j*nx+i] = 2.*us1[k*ny*nx+j*nx+i]-us2[k*ny*nx+j*nx+i] + tempuy2+tempuz2
-                                        -tempvxy*vvs2*dtz*dtx-tempwxz*vvs2*dtz*dtx;
-                        vs[k*ny*nx+j*nx+i] = 2.*vs1[k*ny*nx+j*nx+i]-vs2[k*ny*nx+j*nx+i] + tempvx2+tempvz2
-                                        -tempuxy*vvs2*dtz*dtx-tempwyz*vvs2*dtz*dtx;
-                        ws[k*ny*nx+j*nx+i] = 2.*ws1[k*ny*nx+j*nx+i]-ws2[k*ny*nx+j*nx+i] + tempwx2+tempwy2
-                                        -tempuxz*vvs2*dtz*dtx-tempvyz*vvs2*dtz*dtx;
-                    }//for(i = nleft; i<nright; i++) end
-                }// for(j = nfront; j<nback; j++) end        
-            }// for(k = ntop; k<nbottom; k++) end
-
-            #pragma omp parallel for collapse(3)
-            for(k = ntop; k < nbottom; ++k){
-                for(j = nfront; j < nback; ++j){
-                    for(i = nleft; i < nright; ++i){
-                        u[k*ny*nx+j*nx+i] = up[k*ny*nx+j*nx+i] + us[k*ny*nx+j*nx+i];
-                        v[k*ny*nx+j*nx+i] = vp[k*ny*nx+j*nx+i] + vs[k*ny*nx+j*nx+i];
-                        w[k*ny*nx+j*nx+i] = wp[k*ny*nx+j*nx+i] + ws[k*ny*nx+j*nx+i];
-
-                        up2[k*ny*nx+j*nx+i] = up1[k*ny*nx+j*nx+i];
-                        up1[k*ny*nx+j*nx+i] = up[k*ny*nx+j*nx+i];
-                        us2[k*ny*nx+j*nx+i] = us1[k*ny*nx+j*nx+i];
-                        us1[k*ny*nx+j*nx+i] = us[k*ny*nx+j*nx+i];
-                        vp2[k*ny*nx+j*nx+i] = vp1[k*ny*nx+j*nx+i];
-                        vp1[k*ny*nx+j*nx+i] = vp[k*ny*nx+j*nx+i];
-                        vs2[k*ny*nx+j*nx+i] = vs1[k*ny*nx+j*nx+i];
-                        vs1[k*ny*nx+j*nx+i] = vs[k*ny*nx+j*nx+i];
-                        wp2[k*ny*nx+j*nx+i] = wp1[k*ny*nx+j*nx+i];
-                        wp1[k*ny*nx+j*nx+i] = wp[k*ny*nx+j*nx+i];
-                        ws2[k*ny*nx+j*nx+i] = ws1[k*ny*nx+j*nx+i];
-                        ws1[k*ny*nx+j*nx+i] = ws[k*ny*nx+j*nx+i];
-                    }// for(i = nleft; i < nright; ++i)
-                }// for(j = nfront; j < nback; ++j)
-            }// for(k = ntop; k < nbottom; ++k)
+            iterate(l);
         }// for(l = 1; l <= lt; ++l)
 
-
-            fwrite(up+169*ny*nx,sizeof(float),ny*nx,fout);
+        fwrite(up+169*ny*nx,sizeof(float),ny*nx,fout);
        
     
     }//for(ishot=1;ishot<=nshot;ishot++) end
@@ -426,6 +274,20 @@ int main(int argc, char **argv)
     }
     fclose(flog);
 
+    free_all();
+
+    gettimeofday(&end,NULL);
+    all_time = (end.tv_sec-start.tv_sec)+(float)(end.tv_usec-start.tv_usec)/1000000.0;
+    printf("run time:\t%f s\n",all_time);
+    flog = fopen(logfile,"a");
+    fprintf(flog,"\nrun time:\t%f s\n\n",all_time);
+    fprintf(flog,"------------end time------------\n");
+    fclose(flog);
+    system(tmp);
+    return 1;
+}
+
+void free_all(){
     free(u);
     free(v);
     free(w);
@@ -451,14 +313,155 @@ int main(int argc, char **argv)
     free(density);
     free(vss);
     free(wave);
+}
 
-    gettimeofday(&end,NULL);
-    all_time = (end.tv_sec-start.tv_sec)+(float)(end.tv_usec-start.tv_usec)/1000000.0;
-    printf("run time:\t%f s\n",all_time);
-    flog = fopen(logfile,"a");
-    fprintf(flog,"\nrun time:\t%f s\n\n",all_time);
-    fprintf(flog,"------------end time------------\n");
-    fclose(flog);
-    system(tmp);
-    return 1;
+void iterate(int iter){
+    int i,j,k,kk,kkk;
+    float vvp2,drd1,drd2,vvs2,tempux2,tempuy2,tempuz2,tempvx2,tempvy2,tempvz2,
+        tempwx2,tempwy2,tempwz2,tempuxz,tempuxy,tempvyz,tempvxy,tempwxz,tempwyz;
+    int idx, idx1, idx2, idx3;
+    float px,sx;
+    int xmax, nleft, nright, nfront, nback, ntop, nbottom;
+    xmax = (iter * dt * velmax / unit) + 10;
+
+    nleft = ncx_shot - xmax;
+    nright = ncx_shot + xmax;
+    nfront = ncy_shot - xmax;
+    nback = ncy_shot + xmax;
+    ntop = ncz_shot - xmax;
+    nbottom = ncz_shot + xmax;
+    if(nleft < 5) nleft = 5;
+    if(nright > nx - 5) nright = nx - 5;
+    if(nfront < 5) nfront = 5;
+    if(nback > ny - 5) nback = ny - 5;
+    if(ntop < 5) ntop = 5;
+    if(nbottom > nz - 5) nbottom = nz - 5;
+
+    ntop = ntop - 1;
+    nfront = nfront - 1;
+    nleft = nleft - 1;
+
+    #pragma omp parallel for ordered collapse(3) private(vvp2, vvs2, px, sx,tempux2,tempuy2,tempuz2,tempvx2,tempvy2,tempvz2,\
+                                                            tempwx2,tempwy2,tempwz2,tempuxz,tempuxy,tempvyz,tempvxy,tempwxz,tempwyz, idx2)
+    for(k = ntop; k < nbottom; ++k){
+        for(j = nfront; j < nback; ++j){
+            for(i = nleft; i < nright; ++i){
+                idx2 = k*ny*nx+j*nx+i;
+                if(i==ncx_shot-1 && j==ncy_shot-1 && k==ncz_shot-1){
+                    px=1.;
+                    sx=0.;
+                }else{
+                    px=0.;
+                    sx=0.;
+                }
+
+                vvp2=vpp[idx2]*vpp[idx2];
+                vvs2=vss[idx2]*vss[idx2];
+
+                tempux2=0.0f; tempuy2=0.0f; tempuz2=0.0f; tempvx2=0.0f; tempvy2=0.0f; tempvz2=0.0f; tempwx2=0.0f; tempwy2=0.0f; tempwz2=0.0f; 
+                tempuxz=0.0f; tempuxy=0.0f; tempvyz=0.0f; tempvxy=0.0f; tempwxz=0.0f; tempwyz=0.0f;
+
+                for(kk = 1; kk <= mm; ++kk){
+                    tempux2 = tempux2 + c[kk-1][0] * (u[k*ny*nx+j*nx+(i+kk)] + u[k*ny*nx+j*nx+(i-kk)]);
+                    tempuy2 = tempuy2 + c[kk-1][0] * (u[k*ny*nx+(j+kk)*nx+i] + u[k*ny*nx+(j-kk)*nx+i]);
+                    tempuz2 = tempuz2 + c[kk-1][0] * (u[(k+kk)*ny*nx+j*nx+i] + u[(k-kk)*ny*nx+j*nx+i]);
+
+                    tempvx2 = tempvx2 + c[kk-1][0] * (v[k*ny*nx+j*nx+(i+kk)] + v[k*ny*nx+j*nx+(i-kk)]);
+                    tempvy2 = tempvy2 + c[kk-1][0] * (v[k*ny*nx+(j+kk)*nx+i] + v[k*ny*nx+(j-kk)*nx+i]);
+                    tempvz2 = tempvz2 + c[kk-1][0] * (v[(k+kk)*ny*nx+j*nx+i] + v[(k-kk)*ny*nx+j*nx+i]);
+
+                    tempwx2 = tempwx2 + c[kk-1][0] * (w[k*ny*nx+j*nx+(i+kk)] + w[k*ny*nx+j*nx+(i-kk)]);
+                    tempwy2 = tempwy2 + c[kk-1][0] * (w[k*ny*nx+(j+kk)*nx+i] + w[k*ny*nx+(j-kk)*nx+i]);
+                    tempwz2  =tempwz2 + c[kk-1][0] * (w[(k+kk)*ny*nx+j*nx+i] + w[(k-kk)*ny*nx+j*nx+i]);
+
+                } //for(kk=1;kk<=mm;kk++) end
+
+                tempux2 = (tempux2+c0*u[idx2])*vvp2*dtx*dtx;
+                tempuy2 = (tempuy2+c0*u[idx2])*vvs2*dtx*dtx;
+                tempuz2 = (tempuz2+c0*u[idx2])*vvs2*dtz*dtz;
+
+                tempvx2 = (tempvx2+c0*v[idx2])*vvs2*dtx*dtx;
+                tempvy2 = (tempvy2+c0*v[idx2])*vvp2*dtx*dtx;
+                tempvz2 = (tempvz2+c0*v[idx2])*vvs2*dtz*dtz;
+
+                tempwx2 = (tempwx2+c0*w[idx2])*vvs2*dtx*dtx;
+                tempwy2 = (tempwy2+c0*w[idx2])*vvs2*dtx*dtx;
+                tempwz2 = (tempwz2+c0*w[idx2])*vvp2*dtz*dtz;
+
+                for(kk=1;kk<=mm;kk++){
+                    for(kkk=1;kkk<=mm;kkk++){
+                        tempuxz=tempuxz+c[kkk-1][1+kk]*(u[(k+kkk)*ny*nx+j*nx+(i+kk)]
+                                        -u[(k-kkk)*ny*nx+j*nx+(i+kk)]
+                                        +u[(k-kkk)*ny*nx+j*nx+(i-kk)]
+                                        -u[(k+kkk)*ny*nx+j*nx+(i-kk)]);
+                        tempuxy=tempuxy+c[kkk-1][1+kk]*(u[k*ny*nx+(j+kkk)*nx+(i+kk)]
+                                        -u[k*ny*nx+(j-kkk)*nx+(i+kk)]
+                                        +u[k*ny*nx+(j-kkk)*nx+(i-kk)]
+                                        -u[k*ny*nx+(j+kkk)*nx+(i-kk)]);
+
+                        tempvyz=tempvyz+c[kkk-1][1+kk]*(v[(k+kkk)*ny*nx+(j+kk)*nx+i]
+                                        -v[(k-kkk)*ny*nx+(j+kk)*nx+i]
+                                        +v[(k-kkk)*ny*nx+(j-kk)*nx+i]
+                                        -v[(k+kkk)*ny*nx+(j-kk)*nx+i]);
+                        tempvxy=tempvxy+c[kkk-1][1+kk]*(v[k*ny*nx+(j+kkk)*nx+(i+kk)]
+                                        -v[k*ny*nx+(j-kkk)*nx+(i+kk)]
+                                        +v[k*ny*nx+(j-kkk)*nx+(i-kk)]
+                                        -v[k*ny*nx+(j+kkk)*nx+(i-kk)]);
+
+                        tempwyz=tempwyz+c[kkk-1][1+kk]*(w[(k+kkk)*ny*nx+(j+kk)*nx+i]
+                                        -w[(k-kkk)*ny*nx+(j+kk)*nx+i]
+                                        +w[(k-kkk)*ny*nx+(j-kk)*nx+i]
+                                        -w[(k+kkk)*ny*nx+(j-kk)*nx+i]);
+                        tempwxz=tempwxz+c[kkk-1][1+kk]*(w[(k+kkk)*ny*nx+j*nx+(i+kk)]
+                                        -w[(k-kkk)*ny*nx+j*nx+(i+kk)]
+                                        +w[(k-kkk)*ny*nx+j*nx+(i-kk)]
+                                        -w[(k+kkk)*ny*nx+j*nx+(i-kk)]);
+                    } // for(kkk=1;kkk<=mm;kkk++) end
+                } //for(kk=1;kk<=mm;kk++) end
+
+                up[idx2] = 2.*up1[idx2]-up2[idx2]
+                                +tempux2+tempwxz*vvp2*dtz*dtx
+                                +tempvxy*vvp2*dtz*dtx;
+                vp[idx2] = 2.*vp1[idx2]-vp2[idx2]
+                                +tempvy2+tempuxy*vvp2*dtz*dtx
+                                +tempwyz*vvp2*dtz*dtx;
+                wp[idx2] = 2.*wp1[idx2]-wp2[idx2]
+                                +tempwz2+tempuxz*vvp2*dtz*dtx
+                                +tempvyz*vvp2*dtz*dtx
+                                +px*wave[iter-1];
+                us[idx2] = 2.*us1[idx2]-us2[idx2] + tempuy2+tempuz2
+                                -tempvxy*vvs2*dtz*dtx-tempwxz*vvs2*dtz*dtx;
+                vs[idx2] = 2.*vs1[idx2]-vs2[idx2] + tempvx2+tempvz2
+                                -tempuxy*vvs2*dtz*dtx-tempwyz*vvs2*dtz*dtx;
+                ws[idx2] = 2.*ws1[idx2]-ws2[idx2] + tempwx2+tempwy2
+                                -tempuxz*vvs2*dtz*dtx-tempvyz*vvs2*dtz*dtx;
+            }//for(i = nleft; i < nright; i++) end
+        }// for(j = nfront; j < nback; j++) end        
+    }// for(k = ntop; k < nbottom; k++) end
+
+    #pragma omp parallel for collapse(3) private(idx3)
+    for(k = ntop; k < nbottom; ++k){
+        for(j = nfront; j < nback; ++j){
+            for(i = nleft; i < nright; ++i){
+                idx3 = k*ny*nx+j*nx+i;
+                u[idx3] = up[idx3] + us[idx3];
+                v[idx3] = vp[idx3] + vs[idx3];
+                w[idx3] = wp[idx3] + ws[idx3];
+
+                up2[idx3] = up1[idx3];
+                up1[idx3] = up[idx3];
+                us2[idx3] = us1[idx3];
+                us1[idx3] = us[idx3];
+                vp2[idx3] = vp1[idx3];
+                vp1[idx3] = vp[idx3];
+                vs2[idx3] = vs1[idx3];
+                vs1[idx3] = vs[idx3];
+                wp2[idx3] = wp1[idx3];
+                wp1[idx3] = wp[idx3];
+                ws2[idx3] = ws1[idx3];
+                ws1[idx3] = ws[idx3];
+            }// for(i = nleft; i < nright; ++i)
+        }// for(j = nfront; j < nback; ++j)
+    }// for(k = ntop; k < nbottom; ++k)
+
 }
