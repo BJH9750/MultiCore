@@ -48,9 +48,9 @@ int main(int argc, char **argv)
 		if(k1!=ns) break;
 		for(i=0;i<ns;i++)
 		{
-                        file1sum += fabs(buf[i]);
+            file1sum += fabs(buf[i]);
 			file2sum += fabs(dat[i]);
-		        file1sum2 += buf[i]*buf[i];
+		    file1sum2 += buf[i]*buf[i];
 			sub=buf[i]-dat[i];
 			if(fabs(sub)>diffmax) diffmax=fabs(sub);
 		  	diffsum += fabs(sub);
