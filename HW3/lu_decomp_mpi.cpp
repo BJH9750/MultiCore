@@ -307,25 +307,26 @@ double verify(double *A, double *LU, int size, int n, int rank){
             }else{
                 int color = rank < size ? 0 : 1;
                 MPI_Comm_split(MPI_COMM_WORLD, color, rank, &row_root);
-
-                MPI_Scatter(A + idx, n, MPI_DOUBLE, A_row, n, MPI_DOUBLE, ROOT, row_root);
-                MPI_Scatter(LU + idx, n, MPI_DOUBLE, LU_row, n, MPI_DOUBLE, ROOT, row_root);
-                #ifdef P
-                    if(rank == 0) printf("loop out color 0 rank :%d size: %d\n", rank, size);
-                #endif
-                for(int j = 0; j < n; ++j){
+                if(color == 0){
+                    MPI_Scatter(A + idx, n, MPI_DOUBLE, A_row, n, MPI_DOUBLE, ROOT, row_root);
+                    MPI_Scatter(LU + idx, n, MPI_DOUBLE, LU_row, n, MPI_DOUBLE, ROOT, row_root);
                     #ifdef P
-                        if(color == 0) printf("%f ", A_row[j]);
+                        if(color == 0) printf("loop out color 0 rank :%d size: %d\n", rank, size);
                     #endif
-                    row_sum += (A_row[j] - LU_row[j]) * (A_row[j] - LU_row[j]);
-                }
-                #ifdef P
-                    if(color == 0) printf("\n");
-                #endif
-                row_sum = sqrt(row_sum);
+                    for(int j = 0; j < n; ++j){
+                        #ifdef P
+                            if(color == 0) printf("%f ", A_row[j]);
+                        #endif
+                        row_sum += (A_row[j] - LU_row[j]) * (A_row[j] - LU_row[j]);
+                    }
+                    #ifdef P
+                        if(color == 0) printf("\n");
+                    #endif
+                    row_sum = sqrt(row_sum);
 
-                MPI_Reduce(&row_sum, &tmp_sum, 1, MPI_DOUBLE, MPI_SUM, ROOT, row_root);
-                sum += tmp_sum;
+                    MPI_Reduce(&row_sum, &tmp_sum, 1, MPI_DOUBLE, MPI_SUM, ROOT, row_root);
+                    sum += tmp_sum;
+                }
             }
             
         }
