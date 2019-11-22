@@ -8,6 +8,7 @@
 #define P
 int calculateBlock(int world, int n){
     world = sqrt(world);
+    world = world > n ? sqrt(n) : world;
     while((n % world) != 0){
         --world;
     }
@@ -44,13 +45,9 @@ int main(int argc, char** argv){
     
     double *A, *B, *C;
     
-    A = (double *)malloc(sizeof(double) * n * n);
-    B = (double *)malloc(sizeof(double) * n * n);
-    C = (double *)calloc(sizeof(double), n * n);
-
     int nblock, nproc, all_proc;
     //printf("%d\n", calculate_block(80, 600));
-
+    
     MPI_Init(NULL, NULL);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -58,20 +55,23 @@ int main(int argc, char** argv){
     nproc = calculateBlock(size, n);
     nblock = n / nproc; // row, col num per block
     all_proc = nproc * nproc;
-    if(rank == 0){
-        for(int i = 0; i < n; ++i){
-            for(int j = 0; j < n; ++j){
-                A[i*n+j] = rand() % 100;
-                B[i*n+j] = rand() % 100;
-            }
-        }
-    }
-    
+
     int color = (rank < all_proc) ? 0 : 1;
     MPI_Comm square_comm;
     MPI_Comm_split(MPI_COMM_WORLD, color, rank, &square_comm);
 
     if(color == 0){
+        A = (double *)malloc(sizeof(double) * n * n);
+        B = (double *)malloc(sizeof(double) * n * n);
+        C = (double *)calloc(sizeof(double), n * n);
+        if(rank == 0){
+            for(int i = 0; i < n; ++i){
+                for(int j = 0; j < n; ++j){
+                    A[i*n+j] = rand() % 100;
+                    B[i*n+j] = rand() % 100;
+                }
+            }
+        }
         int nprocdim[] = {nproc, nproc};
         int period[] = {1, 1};
         int coords[2];
@@ -105,7 +105,7 @@ int main(int argc, char** argv){
                 displ += (nblock-1) * nproc;
             }
         }
-
+        #ifdef PQ
         if(rank == 0){
             printf("nproc : %d\tnblock : %d\n", nproc, nblock);
             for(int i = 0; i < nproc; ++i){
@@ -115,7 +115,7 @@ int main(int argc, char** argv){
             }
             printf("\n");
         }
-
+        #endif
         double *subA = (double *)malloc(sizeof(double) * nblock * nblock);
         double *subB = (double *)malloc(sizeof(double) * nblock * nblock);
         double *subC = (double *)calloc(nblock * nblock, sizeof(double));
@@ -140,13 +140,13 @@ int main(int argc, char** argv){
 
         MPI_Gatherv(subC, nblock * nblock, MPI_DOUBLE, C, sendcounts, displs, sub_array_t, 0, square_comm);
 
-        #ifdef P
-        if(rank == 0){
-            printMatrix(A, "A", n, rank);
-            printMatrix(B, "B", n, rank);
-            printMatrix(C, "C", n, rank);
+        if(argc > 3){
+            if(rank == 0){
+                printMatrix(A, "A", n, rank);
+                printMatrix(B, "B", n, rank);
+                printMatrix(C, "C", n, rank);
+            }
         }
-        #endif
     }
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Finalize();
