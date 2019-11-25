@@ -19,12 +19,12 @@ void split_matrix(double *U, double *L, int n);
 double* matrixProduct(double *A, double *U, double *L, int size, int n, int rank);
 void matrix_print(double *mat, int size);
 int calculateBlock(int world, int n);
-void subProduct(double *A, double *B, double *C, int n);
+void subProduct(double *A, double *B, double *C, int n, int reset);
 double verify(double *A, double *LU, int size, int n, int rank);
 double *matrixIeverse(double *A, int n);
 void subSubtract(double *A, double *B, double *C, int n);
+void cleanMatrix(double *A, int n, char c);
 
-MPI_Comm square_comm;
 
 void print_row(double *A, int size, int rank, int sender){
     if(rank !=sender) printf("rank %d sender %d", rank, sender);
@@ -52,47 +52,26 @@ int main(int argc, char** argv){
     MPI_Init(NULL, NULL);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    starttime = MPI_Wtime();
+    
     for(int i = 0; i < n; ++i){
         for(int j = 0; j < n; ++j){
             A[i*n + j] = (int) (rand() % 1000);
             tmpA[i*n + j] = A[i*n + j];
-            if(i == j) L[i*n + j] = 1;
         }
     }
-    endtime = MPI_Wtime();
-    if(rank == 0) printf("Init : %lf\n", endtime - starttime);
-    if(rank == 0 && argc > 3){
-        matrix_print(A, n);
-    }
-    starttime = MPI_Wtime();
+
     decomp(tmpA, U, L, n, rank, size);
-    endtime = MPI_Wtime();
-    if(rank == 0) printf("decomp : %lf\n", endtime - starttime);
-    if(rank == 0 && argc > 3){
-        matrix_print(tmpA, n);
-        matrix_print(U, n);
-        matrix_print(L, n);
-    }
+    if(rank == 0) printf("decomp\n");
+    cleanMatrix(U, n, 'U');
+    cleanMatrix(L, n, 'L');
+    if(rank == 0) printf("clear\n");
+    LU = matrixProduct(A, U, L, size, n, rank);
+    if(rank == 0) printf("product\n");
+    double value = verify(A, LU, size, n, rank); 
 
-    // starttime = MPI_Wtime();
-    // split_matrix(U, L, n);
-    // endtime = MPI_Wtime();
-    // if(rank == 0) printf("split : %lf\n", endtime - starttime);
-
-    // starttime = MPI_Wtime();
-    // LU = matrixProduct(A, U, L, size, n, rank);
-    // endtime = MPI_Wtime();
-    // if(rank == 0) printf("product : %lf\n", endtime - starttime);
-    // if(rank == 0 && argc > 3) matrix_print(LU, n);
-    
-    // starttime = MPI_Wtime();
-    // double value = verify(A, LU, size, n, rank); 
-    // endtime = MPI_Wtime();
-    // if(rank == 0) printf("compare : %lf\n", endtime - starttime);
-    // if(rank == 0){
-    //     cout << "verify : "  << setprecision(15) << value << endl;
-    // } 
+    if(rank == 0){
+        cout << "verify : "  << setprecision(15) << value << endl;
+    } 
 
     MPI_Finalize();
 }
@@ -157,23 +136,20 @@ void rowCalculation(double *A_pivot, double *A_target, double *L_target, int siz
 void decomp(double *A, double *U, double *L, int n, int rank, int size){
     
     int nblock, nproc, all_proc;
-    double *LU;
     nproc = calculateBlock(size, n);
     nblock = n / nproc; // row, col num per block
     all_proc = nproc * nproc;
-
     int color = (rank < all_proc) ? 0 : 1;
-
+    MPI_Comm square_comm;
     MPI_Comm_split(MPI_COMM_WORLD, color, rank, &square_comm);
 
     if(color == 0){
-        LU = (double *)calloc(sizeof(double), n * n);
         int nprocdim[] = {nproc, nproc};
         int period[] = {1, 1};
         int coords[2];
         int right=0, left=0, down=0, up=0;
 
-        MPI_Comm cart_comm;
+        MPI_Comm cart_comm, sub_cart_comm;
         MPI_Cart_create(square_comm, 2, nprocdim, period, 1, &cart_comm);
         MPI_Comm_rank(cart_comm, &rank);
         MPI_Cart_coords(cart_comm, rank, 2, coords);
@@ -189,89 +165,154 @@ void decomp(double *A, double *U, double *L, int n, int rank, int size){
         int *sendcounts = (int *)malloc(sizeof(int) * all_proc);
         int *displs = (int *)malloc(sizeof(int) * all_proc);
 
-        if(rank == 0){
-            for(int i = 0; i < all_proc; ++i){
-                sendcounts[i] = 1;
-            }
-            int displ = 0;
-            for(int i = 0; i < nproc; ++i){
-                for(int j = 0; j < nproc; ++j, ++displ){
-                    displs[i*nproc + j] = displ; 
-                }
-                displ += (nblock-1) * nproc;
-            }
-        }
+        MPI_Comm sub_comm, root_comm;
+        int sub_rank;
+        int sub_size;
+        int sub_coords[2];
 
         double *subA = (double *)malloc(sizeof(double) * nblock * nblock);
         double *subL = (double *)malloc(sizeof(double) * nblock * nblock);
         double *subU = (double *)malloc(sizeof(double) * nblock * nblock);
         double *invL, *invU;
 
-        MPI_Scatterv(A, sendcounts, displs, sub_array_t, subA, nblock * nblock, MPI_DOUBLE, 0, square_comm);
-        if(rank == 0){
-            subDecomp(subA, subL, nblock);
-            memcpy(subU, subA, sizeof(double) * nblock * nblock);
-        }
+        int diag_rank;
+        int diag_color = (coords[0] == coords[1]) ? 0 : 1;
+        MPI_Comm_split(square_comm, diag_color, rank, &root_comm);
+        MPI_Comm_rank(root_comm, &diag_rank);
         
-        MPI_Comm row_comm, col_comm;
-        int row_color = rank / nproc;
-        int col_color = rank % nproc;
+        for(int m = 0; m < nproc; ++m){
+            int sub_color = (coords[0] >= m && coords[1] >= m) ? 0 : 1;
+            MPI_Comm_split(square_comm, sub_color, rank, &sub_comm);
+            if(sub_color == 0){
+                MPI_Cart_create(sub_comm, 2, nprocdim, period, 1, &sub_cart_comm);
+                MPI_Comm_rank(sub_comm, &sub_rank);
+                MPI_Comm_size(sub_comm, &sub_size);
+                MPI_Cart_coords(sub_cart_comm, rank, 2, sub_coords);
 
-        MPI_Comm_split(square_comm, row_color, rank, &row_comm);
-        MPI_Comm_split(square_comm, col_color, rank, &col_comm);
-        
-        int row_rank, row_size, col_rank, col_size;
-        MPI_Comm_rank(row_comm, &row_rank);
-        MPI_Comm_size(row_comm, &row_size);
-        MPI_Comm_rank(col_comm, &col_rank);
-        MPI_Comm_size(col_comm, &col_size);
+                sendcounts = (int *)malloc(sizeof(int) * sub_size);
+                displs = (int *)malloc(sizeof(int) * sub_size);
 
-        if(row_color == 0){
-            MPI_Bcast(subL, nblock * nblock, MPI_DOUBLE, ROOT, row_comm);
+                nprocdim[0] -= 1;
+                nprocdim[1] -= 1;
 
-            if(rank != ROOT){
-                invL = matrixIeverse(subL, nblock);
-                subProduct(invL, subA, subU, nblock);
+                if(sub_rank == 0){
+                    for(int i = 0; i < sub_size; ++i){
+                        sendcounts[i] = 1;
+                    }
+                    int displ = 0;
+                    for(int i = 0; i < nproc - m; ++i){
+                        for(int j = 0; j < nproc - m; ++j, ++displ){
+                            displs[i*(nproc - m) + j] = displ; 
+                        }
+                        displ += (nblock - 1) * nproc + (nblock - 1) * m;
+                    }
+                }
+                if(rank == 6) printf("asd\n");
+                MPI_Scatterv(ADDR(A, n, m*nblock, m*nblock), sendcounts, displs, sub_array_t, subA, nblock * nblock, MPI_DOUBLE, ROOT, sub_comm);
+
+                if(sub_rank == ROOT){
+                    subDecomp(subA, subL, nblock);
+                    memcpy(subU, subA, sizeof(double) * nblock * nblock);
+                    cleanMatrix(subU, nblock, 'U');
+                    cleanMatrix(subL, nblock, 'L');
+                }
+
+                if(sub_size != 1){
+                    MPI_Comm row_comm, col_comm;
+                    int row_color = sub_rank / (nproc - m);
+                    int col_color = sub_rank % (nproc - m);
+
+                    MPI_Comm_split(sub_comm, row_color, sub_rank, &row_comm);
+                    MPI_Comm_split(sub_comm, col_color, sub_rank, &col_comm);
+                    
+                    int row_rank, row_size, col_rank, col_size;
+                    MPI_Comm_rank(row_comm, &row_rank);
+                    MPI_Comm_size(row_comm, &row_size);
+                    MPI_Comm_rank(col_comm, &col_rank);
+                    MPI_Comm_size(col_comm, &col_size);
+
+                    if(row_color == 0){
+                        MPI_Bcast(subL, nblock * nblock, MPI_DOUBLE, ROOT, row_comm);
+                        if(sub_rank != ROOT){
+                            invL = matrixIeverse(subL, nblock);
+                            subProduct(invL, subA, subU, nblock, 1);
+                        }
+                    }
+                    
+                    if(col_color == 0){
+                        MPI_Bcast(subU, nblock * nblock, MPI_DOUBLE, ROOT, col_comm);
+                        if(sub_rank != ROOT){
+                            invU = matrixIeverse(subU, nblock);
+                            subProduct(subA, invU, subL, nblock, 1);
+                        }
+                    }
+
+                    if(row_color != 0){
+                        int row_root;
+                        int row_root_coords[] = {row_color, 0};
+                        MPI_Cart_rank(cart_comm, row_root_coords, &row_root);
+                        MPI_Bcast(subL, nblock * nblock, MPI_DOUBLE, ROOT, row_comm);
+                    }
+
+                    if(col_color != 0){
+                        int col_root;
+                        int col_root_coords[] = {0, col_color};
+                        MPI_Cart_rank(cart_comm, col_root_coords, &col_root);
+                        MPI_Bcast(subU, nblock * nblock, MPI_DOUBLE, ROOT, col_comm);
+                    }
+
+                    if(row_color != 0 && col_color != 0){
+                        double *tmpA = (double *)malloc(sizeof(double) * nblock * nblock);
+                        subProduct(subL, subU, tmpA, nblock, 1);
+                        subSubtract(subA, tmpA, subA, nblock);
+                    }
+                }
+
+                MPI_Gatherv(subA, nblock * nblock, MPI_DOUBLE, ADDR(A, n, m*nblock, m*nblock), sendcounts, displs, sub_array_t, ROOT, sub_comm);
+                MPI_Gatherv(subL, nblock * nblock, MPI_DOUBLE, ADDR(L, n, m*nblock, m*nblock), sendcounts, displs, sub_array_t, ROOT, sub_comm);
+                MPI_Gatherv(subU, nblock * nblock, MPI_DOUBLE, ADDR(U, n, m*nblock, m*nblock), sendcounts, displs, sub_array_t, ROOT, sub_comm);
+                
+                MPI_Comm_free(&sub_cart_comm);
+                
+                free(sendcounts);
+                free(displs);
             }
-        }
-        
-        if(col_color == 0){
-            MPI_Bcast(subU, nblock * nblock, MPI_DOUBLE, ROOT, col_comm);
-            if(rank != ROOT){
-                invU = matrixIeverse(subU, nblock);
-                subProduct(subA, invU, subL, nblock);
+            
+            if(diag_color == 0){
+                MPI_Bcast(A, n * n, MPI_DOUBLE, m, root_comm);
+                MPI_Bcast(L, n * n, MPI_DOUBLE, m, root_comm);
+                MPI_Bcast(U, n * n, MPI_DOUBLE, m, root_comm);
             }
+            MPI_Barrier(square_comm); 
+            MPI_Comm_free(&sub_comm);
         }
-
-        if(row_color != 0){
-            int row_root;
-            int row_root_coords[] = {row_color, 0};
-            MPI_Cart_rank(cart_comm, row_root_coords, &row_root);
-            MPI_Bcast(subL, nblock * nblock, MPI_DOUBLE, ROOT, row_comm);
-        }
-
-        if(col_color != 0){
-            int col_root;
-            int col_root_coords[] = {0, col_color};
-            MPI_Cart_rank(cart_comm, col_root_coords, &col_root);
-            MPI_Bcast(subU, nblock * nblock, MPI_DOUBLE, ROOT, col_comm);
-        }
-
-        if(row_color != 0 && col_color != 0){
-            double *tmpA = (double *)malloc(sizeof(double) * nblock * nblock);
-            subProduct(subL, subU, tmpA, nblock);
-            subSubtract(subA, tmpA, subA, nblock);
-        }
-
-        MPI_Gatherv(subA, nblock * nblock, MPI_DOUBLE, A, sendcounts, displs, sub_array_t, 0, square_comm);
-        MPI_Gatherv(subL, nblock * nblock, MPI_DOUBLE, L, sendcounts, displs, sub_array_t, 0, square_comm);
-        MPI_Gatherv(subU, nblock * nblock, MPI_DOUBLE, U, sendcounts, displs, sub_array_t, 0, square_comm);
-        
         MPI_Type_free(&sub_array_t);
+        MPI_Type_free(&array_t);
+        MPI_Comm_free(&root_comm);
+        MPI_Comm_free(&cart_comm);
     }
-
+    MPI_Comm_free(&square_comm);
     MPI_Barrier(MPI_COMM_WORLD);    
 
+}
+
+void cleanMatrix(double *A, int n, char c){
+    int row, i, j;
+    if(c == 'U'){
+        for(i = 1; i < n; ++i){
+            row = i * n;
+            for(j = 0; j < i; ++j){
+                A[row + j] = 0;
+            }
+        }
+    }else{
+        for(i = 0; i < n; ++i){
+            row = i * n;
+            for(j = i+1; j < n; ++j){
+                A[row + j] = 0;
+            }
+        }
+    }
 }
 
 void split_matrix(double *U, double *L, int n){
@@ -290,9 +331,9 @@ double* matrixProduct(double *A, double *U, double *L, int size, int n, int rank
     all_proc = nproc * nproc;
 
     int color = (rank < all_proc) ? 0 : 1;
-
-    MPI_Comm_split(MPI_COMM_WORLD, color, rank, &square_comm);
-
+    MPI_Comm product_comm;
+    MPI_Comm_split(MPI_COMM_WORLD, color, rank, &product_comm);
+    
     if(color == 0){
         LU = (double *)calloc(sizeof(double), n * n);
         int nprocdim[] = {nproc, nproc};
@@ -301,7 +342,7 @@ double* matrixProduct(double *A, double *U, double *L, int size, int n, int rank
         int right=0, left=0, down=0, up=0;
 
         MPI_Comm cart_comm;
-        MPI_Cart_create(square_comm, 2, nprocdim, period, 1, &cart_comm);
+        MPI_Cart_create(product_comm, 2, nprocdim, period, 1, &cart_comm);
         MPI_Comm_rank(cart_comm, &rank);
 
         int start[2] = {0, 0};
@@ -327,24 +368,14 @@ double* matrixProduct(double *A, double *U, double *L, int size, int n, int rank
                 displ += (nblock-1) * nproc;
             }
         }
-        #ifdef PA
-        if(rank == 0){
-            printf("nproc : %d\tnblock : %d\n", nproc, nblock);
-            for(int i = 0; i < nproc; ++i){
-                for(int j = 0; j < nproc; ++j){
-                    printf("%d ", displs[i*nproc + j]);
-                }
-            }
-            printf("\n");
-        }
-        #endif
+
         double *subL = (double *)malloc(sizeof(double) * nblock * nblock);
         double *subU = (double *)malloc(sizeof(double) * nblock * nblock);
         double *subLU = (double *)calloc(nblock * nblock, sizeof(double));
 
-        MPI_Scatterv(L, sendcounts, displs, sub_array_t, subL, nblock * nblock, MPI_DOUBLE, 0, square_comm);
-        MPI_Scatterv(U, sendcounts, displs, sub_array_t, subU, nblock * nblock, MPI_DOUBLE, 0, square_comm);
-        //printf("%d scatter\n", rank);
+        MPI_Scatterv(L, sendcounts, displs, sub_array_t, subL, nblock * nblock, MPI_DOUBLE, 0, product_comm);
+        MPI_Scatterv(U, sendcounts, displs, sub_array_t, subU, nblock * nblock, MPI_DOUBLE, 0, product_comm);
+
         MPI_Cart_coords(cart_comm, rank, 2, coords);
         MPI_Cart_shift(cart_comm, 1, coords[0], &left, &right);
         MPI_Sendrecv_replace(subL, nblock * nblock, MPI_DOUBLE, left, 1, right, 1, cart_comm, MPI_STATUS_IGNORE);
@@ -352,7 +383,7 @@ double* matrixProduct(double *A, double *U, double *L, int size, int n, int rank
         MPI_Sendrecv_replace(subU, nblock * nblock, MPI_DOUBLE, up, 1, down, 1, cart_comm, MPI_STATUS_IGNORE);
 
         for(int i = 0; i < nproc; ++i){
-            subProduct(subL, subU, subLU, nblock);
+            subProduct(subL, subU, subLU, nblock, 0);
 
             MPI_Cart_shift(cart_comm, 1, 1, &left, &right);
             MPI_Sendrecv_replace(subL, nblock * nblock, MPI_DOUBLE, left, 1, right, 1, cart_comm, MPI_STATUS_IGNORE);
@@ -360,15 +391,7 @@ double* matrixProduct(double *A, double *U, double *L, int size, int n, int rank
             MPI_Sendrecv_replace(subU, nblock * nblock, MPI_DOUBLE, up, 1, down, 1, cart_comm, MPI_STATUS_IGNORE);
         }
 
-        MPI_Gatherv(subLU, nblock * nblock, MPI_DOUBLE, LU, sendcounts, displs, sub_array_t, 0, square_comm);
-        #ifdef PB
-        if(rank == ROOT){
-            matrix_print(U, n);
-            matrix_print(L, n);
-            matrix_print(A, n);
-            matrix_print(LU, n);
-        }
-        #endif
+        MPI_Gatherv(subLU, nblock * nblock, MPI_DOUBLE, LU, sendcounts, displs, sub_array_t, 0, product_comm);
         MPI_Type_free(&sub_array_t);
     }
 
@@ -396,7 +419,8 @@ int calculateBlock(int world, int n){
     return world;
 }
 
-void subProduct(double *A, double *B, double *C, int n){
+void subProduct(double *A, double *B, double *C, int n, int reset){
+    if(reset == 1) memset(C, 0, sizeof(double) * n * n);
     for(int i = 0; i < n; ++i){
         for(int j = 0; j < n; ++j){
             for(int k = 0; k < n; ++k){
@@ -452,15 +476,8 @@ double verify(double *A, double *LU, int size, int n, int rank){
         for(i = 0; i < loop; ++i){
             MPI_Scatter(A + i * n * size, n, MPI_DOUBLE, A_row, n, MPI_DOUBLE, ROOT, MPI_COMM_WORLD);
             MPI_Scatter(LU + i * n * size, n, MPI_DOUBLE, LU_row, n, MPI_DOUBLE, ROOT, MPI_COMM_WORLD);
-            #ifdef P
-                printf("color 0 i : %d rank :%d size: %d\n", i, rank, size);
-            #endif
-            //if(rank == ROOT) printf("i : %d loop : %d size : %d\n", i, loop, size);
             row_sum = 0;
             for(int j = 0; j < n; ++j){
-                #ifdef P
-                    printf("%f ", A_row[j]);
-                #endif
                 row_sum += (A_row[j] - LU_row[j]) * (A_row[j] - LU_row[j]);
             }
             #ifdef P
@@ -474,22 +491,13 @@ double verify(double *A, double *LU, int size, int n, int rank){
         if(loop * size != n){
             int idx = i * size * n;
             size = n - loop * size;
-            //if(rank == ROOT) printf("loop out i : %d loop : %d size : %d\n", i, loop, size);
             row_sum = 0;
             if(size == 1){
                 if(rank == 0){
-                    #ifdef P
-                        printf("loop out color 0 rank :%d size: %d\n", rank, size);
-                    #endif
                     for(int j = 0; j < n; ++j){
-                        #ifdef P
-                            printf("%f ", A[idx + j]);
-                        #endif
+
                         row_sum += (A[idx+j] - LU[idx+j]) * (A[idx+j] - LU[idx+j]);
                     }
-                    #ifdef P
-                        printf("\n");
-                    #endif
                     row_sum = sqrt(row_sum);
                     sum += row_sum;
                 }
@@ -499,18 +507,11 @@ double verify(double *A, double *LU, int size, int n, int rank){
                 if(color == 0){
                     MPI_Scatter(A + idx, n, MPI_DOUBLE, A_row, n, MPI_DOUBLE, ROOT, row_root);
                     MPI_Scatter(LU + idx, n, MPI_DOUBLE, LU_row, n, MPI_DOUBLE, ROOT, row_root);
-                    #ifdef P
-                        if(color == 0) printf("loop out color 0 rank :%d size: %d\n", rank, size);
-                    #endif
+
                     for(int j = 0; j < n; ++j){
-                        #ifdef P
-                            if(color == 0) printf("%f ", A_row[j]);
-                        #endif
                         row_sum += (A_row[j] - LU_row[j]) * (A_row[j] - LU_row[j]);
                     }
-                    #ifdef P
-                        if(color == 0) printf("\n");
-                    #endif
+
                     row_sum = sqrt(row_sum);
 
                     MPI_Reduce(&row_sum, &tmp_sum, 1, MPI_DOUBLE, MPI_SUM, ROOT, row_root);
