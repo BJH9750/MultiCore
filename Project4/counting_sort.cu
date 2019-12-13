@@ -10,7 +10,7 @@ __global__ void countArray(int *array, int *histogram, int size, int max_val);
 __global__ void scanCount(int *histogram, int *blockSum, int size);
 __global__ void spreadSum(int *histogram, int *blockSum, int size);
 __global__ void countSort(int *array, int *histogram, int size);
-__host__ int maxTwo(int n);
+__host__ unsigned int maxTwo(int n);
 
 __host__ void debug(const char* name, int *array, int *count, int *blockSum, int size, int max_val, int block){
     FILE* out = fopen(name, "w");
@@ -41,7 +41,7 @@ __host__ void printError(const char* loc){
 __host__ void counting_sort(int array[], int size, int max_val)
 {
     int *d_array, *d_count, *d_blockSum;
-    int nearMaxTwo = maxTwo(max_val);
+    unsigned int nearMaxTwo = maxTwo(max_val);
     int block, thread = 1024;
 
     if(size <= 1024){
@@ -51,6 +51,7 @@ __host__ void counting_sort(int array[], int size, int max_val)
         while((size % thread) != 0) --thread;
         block = size / thread;
     }
+
     int scanBlock, scanThread;
     scanThread = (nearMaxTwo > 1024) ? 1024 : nearMaxTwo;
     scanBlock = (nearMaxTwo == scanThread) ? 1 : (nearMaxTwo / scanThread) / 2;
@@ -66,10 +67,38 @@ __host__ void counting_sort(int array[], int size, int max_val)
     countArray<<<block, thread>>>(d_array, d_count, size, max_val);
 
     scanCount<<<scanBlock, scanThread, scanThread * 2 * sizeof(int)>>>(d_count, d_blockSum, scanThread * 2);
-    
-    scanCount<<<1, scanBlock / 2, scanBlock * sizeof(int)>>>(d_blockSum, NULL, scanBlock);
 
-    spreadSum<<<scanBlock - 1, scanThread, 2 * scanThread * sizeof(int)>>>(d_count, d_blockSum, 2 * scanThread);
+    if(scanBlock <= 2048){
+        scanCount<<<1, scanBlock / 2, scanBlock * sizeof(int)>>>(d_blockSum, NULL, scanBlock);
+        spreadSum<<<scanBlock - 1, scanThread, 2 * scanThread * sizeof(int)>>>(d_count, d_blockSum, 2 * scanThread);
+
+    }else{
+        int scanBlock_r, scanThread_r, blockSumSize;
+        int *d_blockSum_r[5] = {d_blockSum, NULL, NULL, NULL, NULL};
+        int idx = 1;
+        do{
+            scanThread_r = 1024;
+            scanBlock_r = (scanBlock / scanThread_r) / 2;
+            blockSumSize = sizeof(int) * scanBlock_r * 2;
+            cudaMalloc(&d_blockSum_r[idx], blockSumSize);
+            cudaMemset(d_blockSum_r[idx], 0, blockSumSize);
+
+            scanCount<<<scanBlock_r, scanThread_r, scanThread_r * 2 * sizeof(int)>>>(d_blockSum_r[idx - 1], d_blockSum_r[idx], scanThread_r * 2);
+
+            ++idx;
+        }while(scanBlock_r > 1024);
+        --idx;
+
+        scanCount<<<1, scanBlock_r / 2, scanBlock_r * sizeof(int)>>>(d_blockSum_r[idx], NULL, scanBlock_r);
+
+        for(int i = idx; i > 0; --i){
+            spreadSum<<<scanBlock_r - 1, scanThread_r, 2 * scanThread_r * sizeof(int)>>>(d_blockSum_r[idx-1], d_blockSum_r[idx], 2 * scanThread_r);
+            scanBlock_r *= 2;
+        }
+
+        spreadSum<<<scanBlock - 1, scanThread, 2 * scanThread * sizeof(int)>>>(d_count, d_blockSum, 2 * scanThread);
+        for(int i = 1; i < idx; ++i) cudaFree(d_blockSum_r[i]);
+    }
 
     countSort<<<block, thread>>>(d_array, d_count, size);
     cudaMemcpy(array, d_array, sizeof(int) * size, cudaMemcpyDeviceToHost);
@@ -184,8 +213,8 @@ __global__ void countSort(int *array, int *histogram, int size){
 
 }
 
-__host__ int maxTwo(int n){
-    int x = n;
+__host__ unsigned int maxTwo(int n){
+    unsigned int x = n;
     x = x - 1;
     for(int i = 1; i < 32; i <<= 1){
         x |= x >> i;
